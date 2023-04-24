@@ -1,0 +1,60 @@
+NOOP deploy must check custom WinRm parameters and fail if they are not properly configured
+
+Required to check the following
+- MaxMemoryPerShellMB
+- MaxEnvelopeSizeKB
+
+Nice to have
+- BigData.MaximumReceivedDataSizePerCommandMB
+- BigData .MaximumReceivedObjectSizeMB
+
+
+Scripts in scope to add these checks to
+- deploy_gateway.ps1
+- deploy_claims_platform.ps1
+- deploy_back_end.ps1 (for NON-RedGate operations only)
+
+irst draft of code
+
+$PSPolicy=Get-ExecutionPolicy
+$MaxMemoryPerShellMB=(Get-Item WSMan:\localhost\Shell\MaxMemoryPerShellMB).Value 
+$MaxEnvelopeSizeKB=(Get-Item WSMan:\localhost\MaxEnvelopeSizeKB).Value
+$psmaximumreceiveddatasizepercommandmb=(GEt-PSSessionConfiguration -Name BigData).psmaximumreceiveddatasizepercommandmb
+$psmaximumreceivedobjectsizemb= (GEt-PSSessionConfiguration -Name BigData).psmaximumreceivedobjectsizembif (($PSPolicy.ToString() -eq "RemoteSigned")  -and ($MaxMemoryPerShellMB -gt 2147483640) -and ($MaxEnvelopeSizeKB -gt 2045)-and  ($psmaximumreceiveddatasizepercommandmb -eq 500) -and ($psmaximumreceivedobjectsizemb -eq 500) )
+{{{}}
+Write-Host "Success"
+}
+else 
+{{{}}
+    Write-Host "Failure"
+    Write-Host "Policy :$PSPolicy expecting value should be RemoteSigned"
+    Write-Host "MaxMemoryPerShellMB:$MaxMemoryPerShellMB expecting  value more than 2147483640"
+    Write-Host "MaxEnvelopeSizeKB:$MaxEnvelopeSizeKB expecting value more than 2045"
+    Write-Host "psmaximumreceiveddatasizepercommandmb:$psmaximumreceiveddatasizepercommandmb expecting value should be 500"
+    Write-Host "psmaximumreceivedobjectsizemb:$psmaximumreceivedobjectsizemb expecting value should be 500"
+} 
+
+ 
+
+
+
+
+The commands above commands require running powershell in administrator mode, which is not something we do.
+
+ 
+
+https://stackoverflow.com/questions/62659938/can-you-get-the-maxenvelopesizekb-without-needing-to-be-an-admin
+
+ 
+
+You can use the following commands without administrator mode, but they only return successfully IF we’ve already set our custom values
+
+ 
+
+Get-ItemPropertyValue ErrorAction Stop HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WSMAN\Client maxEnvelopeSize  < note there is no KB here
+
+Get-ItemPropertyValue -ErrorAction Stop HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WSMAN\Client MaxMemoryPerShellMB
+
+ 
+
+We would still need to find a workaround for the Get-PSSessionConfiguration commands
