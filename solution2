@@ -1,0 +1,29 @@
+I understand that you want to check the custom WinRM parameters without requiring administrator mode. Here's a modified version of the code snippet that uses the Get-ItemPropertyValue cmdlet with a try-catch block to handle errors when the custom values have not been set:
+
+$PSPolicy = Get-ExecutionPolicy
+try {
+    $MaxMemoryPerShellMB = Get-ItemPropertyValue -ErrorAction Stop HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WSMAN\Client MaxMemoryPerShellMB
+    $MaxEnvelopeSize = Get-ItemPropertyValue -ErrorAction Stop HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WSMAN\Client maxEnvelopeSize
+} catch {
+    Write-Host "Error: Custom WinRM parameter values not found. Please set the custom values and try again."
+    exit 1
+}
+
+# You may need to adjust these values according to your requirements
+$RequiredMaxMemoryPerShellMB = 2147483640
+$RequiredMaxEnvelopeSize = 2045000
+$RequiredPSPolicy = "RemoteSigned"
+
+if (($PSPolicy.ToString() -eq $RequiredPSPolicy) -and ($MaxMemoryPerShellMB -gt $RequiredMaxMemoryPerShellMB) -and ($MaxEnvelopeSize -gt $RequiredMaxEnvelopeSize)) {
+    Write-Host "Success"
+} else {
+    Write-Host "Failure"
+    Write-Host "Policy :$PSPolicy expecting value should be $RequiredPSPolicy"
+    Write-Host "MaxMemoryPerShellMB:$MaxMemoryPerShellMB expecting value more than $RequiredMaxMemoryPerShellMB"
+    Write-Host "MaxEnvelopeSize:$MaxEnvelopeSize expecting value more than $RequiredMaxEnvelopeSize"
+}
+
+# Note: Get-PSSessionConfiguration commands still need a workaround
+This script first tries to get the custom values using the Get-ItemPropertyValue cmdlet. If an error occurs (e.g., the custom values have not been set), the script will output an error message and exit. If the custom values are found, the script will proceed to check if they meet the required values.
+
+Please note that the Get-PSSessionConfiguration commands still need a workaround as you mentioned.
