@@ -1,0 +1,20 @@
+$PSPolicy = Get-ExecutionPolicy
+$MaxMemoryPerShellMB = Get-ItemPropertyValue -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WSMAN\Client' -Name 'MaxMemoryPerShellMB' -ErrorAction SilentlyContinue
+$MaxEnvelopeSize = Get-ItemPropertyValue -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WSMAN\Client' -Name 'maxEnvelopeSize' -ErrorAction SilentlyContinue
+$MaxEnvelopeSizeKB = $MaxEnvelopeSize / 1KB
+
+if (($PSPolicy.ToString() -eq "RemoteSigned") -and ($MaxMemoryPerShellMB -gt 2147483640) -and ($MaxEnvelopeSizeKB -gt 2045)) {
+    Write-Host "Success"
+} else {
+    Write-Host "Failure"
+    Write-Host "Policy :$PSPolicy expecting value should be RemoteSigned"
+    Write-Host "MaxMemoryPerShellMB:$MaxMemoryPerShellMB expecting value more than 2147483640"
+    Write-Host "MaxEnvelopeSizeKB:$MaxEnvelopeSizeKB expecting value more than 2045"
+}
+
+# Note: We can't check psmaximumreceiveddatasizepercommandmb and psmaximumreceivedobjectsizemb without administrator mode.
+
+
+Based on your requirements and considering the limitations of running PowerShell in non-administrator mode, here's an updated script that checks the custom values using Get-ItemPropertyValue without requiring administrator access:
+
+Keep in mind that this script will only return the custom values for MaxMemoryPerShellMB and MaxEnvelopeSizeKB if they have been previously set, and it won't be able to check psmaximumreceiveddatasizepercommandmb and psmaximumreceivedobjectsizemb without administrator mode.
