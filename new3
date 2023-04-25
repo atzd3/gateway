@@ -1,0 +1,477 @@
+
+param([string]$client_name = "",
+      [string]$env_type = "",
+      [string]$version = "",
+      [string]$client_script_folder = "",
+      [string]$site = "",
+      [string]$description = "Gateway Release on " + (Get-Date -Format MMddyyyy),
+      [string]$noop = "false",
+      [string]$force = "false",
+      [string]$ignore_deploy_lock = "false",
+      [string]$deployDB = "true",
+      [string]$log_file="")
+
+. .\logging_helpers.ps1
+		
+$global:logfile = $log_file
+$script:maxRetries = 5
+#
+# --------------------------------------------------------
+# Functions
+# --------------------------------------------------------
+#
+function read_config_xml ($client, $envtype) {
+    If (Test-Path Advantasure_Product_Environments.xml) {
+        Try {
+            #Get XML Content
+            $configxmlfile = Join-Path $scriptspath Advantasure_Product_Environments.xml
+            [xml]$file = Get-Content $configxmlfile
+            $ns = new-object Xml.XmlNamespaceManager $file.NameTable
+            $ns.AddNamespace("cfg", $schemanamespace)
+
+            $client_env_xpath = '/cfg:Environments/cfg:Client[@Name="' + $client.ToUpper() + '" and @Environment="' + $envtype.ToUpper() + '"]'
+
+            if (!([string]::IsNullOrEmpty($site))) {
+                $client_env_server_xpath = '/cfg:Environments/cfg:Client[@Name="' + $client.ToUpper() + '" and @Environment="' + $envtype.ToUpper() + '"]/cfg:Gateway[@Server="' + $env:computername + '" and @Site="' + $site.ToUpper() + '"]'
+            }
+            else {
+                $client_env_server_xpath = '/cfg:Environments/cfg:Client[@Name="' + $client.ToUpper() + '" and @Environment="' + $envtype.ToUpper() + '"]/cfg:Gateway[@Server="' + $env:computername + '"]'
+            }
+
+            write_log_info 2 $client_env_server_xpath
+
+            $script:client_script_folder = $file.SelectSingleNode($client_env_xpath, $ns).GetAttribute("ScriptFolder")
+
+            $file.SelectNodes($client_env_server_xpath, $ns) | % { 
+                write_log_info 2 "Retrieving config Params section for configured server and host: $env:computername..."
+
+                $script:domainname = $_.SelectSingleNode('cfg:DomainName', $ns).innerxml
+				$script:username = $_.SelectSingleNode('cfg:UserName', $ns).innerxml
+                $script:webnodes = $_.SelectSingleNode('cfg:WebNodes', $ns).innerxml
+                $script:servername = $env:computername
+                $script:datasource = $_.SelectSingleNode('cfg:DBServer', $ns).innerxml
+				$script:dbServerNodes = $_.SelectSingleNode('cfg:DBServerNodes', $ns).innerxml
+                $script:database = $_.SelectSingleNode('cfg:DBName', $ns).innerxml
+                $script:dbtriggerlist = $_.SelectSingleNode('cfg:DBTriggerList', $ns).innerxml
+                $script:sitename = $_.SelectSingleNode('cfg:SiteName', $ns).innerxml
+                $script:apppoolname = $_.SelectSingleNode('cfg:AppPoolName', $ns).innerxml
+                $script:iisversion = $_.SelectSingleNode('cfg:IISVersion', $ns).innerxml
+                $script:carrierpath = $_.SelectSingleNode('cfg:CarrierPath', $ns).innerxml
+                $script:copyexclude = $_.SelectSingleNode('cfg:CarrierPath', $ns).GetAttribute("CopyExclude") #.CopyExclude should also work
+                $script:integratedflag = $_.SelectSingleNode('cfg:IntegratedFlag', $ns).innerxml
+                $script:accountsfolder = $_.SelectSingleNode('cfg:AccountsFolder', $ns).innerxml
+                $script:carrierbackuppath = $_.SelectSingleNode('cfg:CarrierBackupPath', $ns).innerxml
+                $script:backupretain = $_.SelectSingleNode('cfg:CarrierBackupPath', $ns).GetAttribute("Retain") #.Retain should also work
+
+                If ($integratedflag.ToUpper() -eq "Y") {
+                    $script:appofflinepath = $accountsfolder
+                }
+                Else {
+                    $script:appofflinepath = $carrierpath
+                }
+            }
+
+            # Checking if the params are populated (main value apppoolname is checked); Log and flag if blank
+            If ([string]::IsNullOrEmpty($script:sitename) -Or [string]::IsNullOrEmpty($script:apppoolname)) {
+                write_log_message -1 "Missing config values for AppPool or SiteName. Assuming no IIS components"
+				$script:noIISflag = $true
+            }
+			
+			# Checking if the params are populated (main value apppoolname is checked); Log and flag if blank
+            If ([string]::IsNullOrEmpty($script:dbServerNodes) -Or ($script:domainname.ToLower() -eq "visiantcloud")) {
+				$script:dbServerNodes = $datasource
+            }
+        }
+        Catch {
+            write_log_message -1 "Failed to read the config XML file for $client $envtype. Abort. " + $_
+            write_log_message -1 $_.Exception|format-list -force
+            $script:exitflag = $true
+        }
+    }
+    Else {
+        write_log_message -1 "Config file Advantasure_Product_Environments.xml not found. Abort."
+        $script:exitflag = $true
+    }
+}
+
+function check_admin () {
+    write_log_info 2 "Validating if current user context is Administrator"
+
+    if (([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] “Administrator”)) {
+        write_log_info 2 "$env:username has Administrator rights"
+    }
+    else {
+        write_log_info -1 "$env:username does not have Administrator rights. Please re-run this script as an Administrator."
+	$script:exitflag = $true
+    }
+}
+
+function Get-ScriptDirectory () {
+    Split-Path $script:MyInvocation.MyCommand.Path
+}
+
+function Copy-DeployContent () {
+    # Deploy site folder
+    if ($noop) {
+		& copy_deploy_content.ps1 -webroot $carrierpath -copyexclude $copyexclude -noop -log_file $global:logfile
+		$returncode = $lastexitcode
+	}
+	else {
+		& copy_deploy_content.ps1 -webroot $carrierpath -copyexclude $copyexclude -log_file $global:logfile
+		$returncode = $lastexitcode
+	}
+    return $returncode
+}
+
+function Deploy_back_end () {
+	& deploy_back_end.ps1 -client $client_script_folder -datasource $datasource -database $database -dbtriggerlist $dbtriggerlist `
+		-version $version -description $description -noop $noop.ToString() -force $force.ToString() -ignore_deploy_lock $ignore_deploy_lock.ToString() `
+        -DBDeployMethod 'LEGACY' -log_file $global:logfile
+	$returncode = $lastexitcode
+
+	if ($returncode -eq "0") {
+		# Rename the DB_Deploy to client specific log older and package it
+		$db_deploy_path = Join-Path $workpath DB_Deploy
+		$db_deploy_logexepath = Join-Path $workpath $client_name-$env_type-DB_Deploy_Logs.exe
+		write_log_info 1 "Packaging $client_name-$env_type-DB_Deploy_Logs.exe"
+		& create_build_pkg.ps1 -build_dir $db_deploy_path -pkg_out_dir $workpath -pkg_name $client_name-$env_type-DB_Deploy_Logs.exe -log_file $global:logfile
+
+		# Determine the type of exe to use
+		if ([System.IntPtr]::Size -eq 4) {
+			$systemtype = "32bit"
+		}
+		else {
+			$systemtype = "64bit"
+		}
+
+		$zip_exe = Join-Path $scriptspath "$systemtype\7z.exe"
+
+		$operation = 'rn'
+		$output = & $zip_exe $operation $db_deploy_logexepath DB_Deploy $client_name-$env_type-DB_Deploy_Logs
+		write_log_info 2 $output
+		$returncode = $lastexitcode
+	}
+	return $returncode
+}
+
+$invocationpath = Get-ScriptDirectory
+Push-Location -Path $invocationpath
+
+$oldPSModulePath = $env:PSModulePath
+$env:PSModulePath += ";$invocationPath"
+Import-Module common_deploy_utilities -Force
+
+
+#
+# --------------------------------------------------------
+# Variables
+# --------------------------------------------------------
+#
+$client_script_folder = ""
+$domainname = ""
+$webnodes = ""
+$servername = ""
+$datasource = ""
+$database = ""
+$dbtriggerlist = ""
+$sitename = ""
+$apppoolname = ""
+$iisversion = ""
+$carrierpath = ""
+$copyexclude = ""
+$integratedflag = ""
+$appofflinepath = ""
+$accountsfolder = ""
+$carrierbackuppath = ""
+$backupretain = ""
+$exitflag = $false
+$adminflag = $false
+$scriptspath = Get-ScriptDirectory
+$global:workpath = (get-item $scriptspath).parent.FullName
+$lockpath = Join-Path $global:workpath deploy.lock
+$carrierlockpath = ""
+$skipFEDeploy = $false
+$noIISflag = $false
+$returncode = 0 # To store exit codes from child scripts; success 0; failure - other than 0
+$schemanamespace = "http://schemas.ikasystems.com/webserver/config"
+$username = ""
+[bool]$noop = [System.Convert]::ToBoolean($noop)
+[bool]$force = [System.Convert]::ToBoolean($force)
+[bool]$deployDB = [System.Convert]::ToBoolean($deployDB)
+$inetsrvpath = Join-Path $env:SystemRoot "System32\inetsrv"
+$appcmdpath = Join-Path $inetsrvpath "appcmd.exe"
+
+#
+# --------------------------------------------------------
+# Script body
+# --------------------------------------------------------
+#
+
+if ([string]::IsNullOrEmpty($client_name) -Or [string]::IsNullOrEmpty($env_type) -Or [string]::IsNullOrEmpty($version)) {   
+    write_log_message -1 "Oops! Fewer parameters than expected were passed! Usage: .\deploy_gateway.ps1 -client_name ""CLIENT"" -env_type ""QA"" -version ""a.b.c.d"" -client_script_folder ""CLIENT_FLDR"" -site ""CORE"" -description ""Optional desc about release"" -deployDB ""true"""
+    Exit -1
+}
+
+$invocationpath = Get-ScriptDirectory
+Push-Location -Path $invocationpath
+
+write_log_info 2 "***************************************************************"
+
+if ($noop) {
+    write_log_info 1 "RUNNING IN NOOP MODE: Starting Gateway Deploy for $client_name $env_type environment in current machine $env:computername"
+}
+else {
+    write_log_info 2 "Starting Gateway Deploy for $client_name $env_type environment in current machine $env:computername"
+}
+
+# Add the scriptspath to environment variable
+if ($Env:Path -notlike $scriptspath) {
+    [Environment]::SetEnvironmentVariable("Path", $Env:Path + ";$scriptspath")
+}
+
+# Call function to check if the user is admin
+check_admin
+
+
+# If no errors, invoke the atomic scripts to perform individual tasks
+If (!$exitflag) {
+    Try {
+		# Call function to read contents from the config xml based on the passed parameters
+		read_config_xml $client_name $env_type		
+	
+		if (!($noIISflag)) {
+			$carrierlockpath = Join-Path $carrierpath deploy.lock
+			If ((Test-Path $carrierlockpath) -and ($ignore_deploy_lock -eq "false")) {
+				$content = Get-Content $carrierlockpath
+				$msg = "A DEPLOY IS ALREADY IN PROGRESS TARGETING THE CARRIER LOCATION $carrierpath. SKIPPING WEBSITE AVAILABILITY, FE DEPLOY AND FE BACKUP. CONTENT OF EXISTING CARRIER LOCK FILE: $content"
+				write_log_message 1 $msg
+				$skipFEDeploy = $true
+			}
+			else {
+				$content = (Get-Date -Format G) + ": Carrier Path - $carrierpath. Deploy initiated for $client_name $env_type, Version: $version. noop flag: $noop"
+				Add-Content -Value $content -Path $carrierlockpath
+
+				# Maintenance Page Up (site offline)
+				If ($noop) {
+					& set_website_availability.ps1 -webroot $appofflinepath -state offline -noop -log_file $global:logfile
+					$returncode = $lastexitcode
+				}
+				else {
+					& set_website_availability.ps1 -webroot $appofflinepath -state offline -log_file $global:logfile
+					$returncode = $lastexitcode
+				}
+
+				if ($returncode -eq "0") {
+					# Backup existing folder
+					if ($noop) {
+						& backup_site_content.ps1 -webroot $carrierpath -backup_path $carrierbackuppath -client $client_name -retain $backupretain -noop -log_file $global:logfile
+						$returncode = $lastexitcode
+					}
+					else {
+						& backup_site_content.ps1 -webroot $carrierpath -backup_path $carrierbackuppath -client $client_name -retain $backupretain -log_file $global:logfile
+						$returncode = $lastexitcode
+					}
+				}
+				else {
+					$exitflag = $true
+				}
+
+				if ($returncode -eq "0") {
+					# Deploy site folder
+                    $functionReference = {Copy-DeployContent}
+                    ($wrapReturnCode, $functionReturnCode) = execute_with_retry -functionReference $functionReference -functionArgList @()
+	                if ($wrapReturnCode -eq $true -and $functionReturnCode -eq 0) {
+		                Write-Host 0 "Return from execute_with_retry was SUCCESS with functionReturnCode = $functionReturnCode."
+	                    $returnCode = 0
+                        $exitFlag = $false 
+                    }
+                    else {
+		                Write-Host -1 "Return from execute_with_retry was FAILURE with functionReturnCode = $functionReturnCode."
+	                    $returnCode = 1
+                        $exitFlag = $true
+                    }
+			}
+                else {
+					$exitflag = $true
+				}
+            }
+		}
+
+		if ($deployDB) {
+			if ($returncode -eq "0") {
+				# Invoke back end (database) wrapper script
+				if ([string]::IsNullOrEmpty($client_script_folder)) {
+					$client_script_folder = $client_name
+				}
+
+				# If web and db are in same server, the db_Deploy happens from web server (else part)
+				if ($servername -eq $datasource) {
+                    
+                    $functionReference = {Deploy_back_end}
+
+                    ($wrapReturnCode, $functionReturnCode) = execute_with_retry -functionReference $functionReference -functionArgList @()
+	                if ($wrapReturnCode -eq $true -and $functionReturnCode -eq 0) {
+		                Write-Host 0 "Return from execute_with_retry was SUCCESS with functionReturnCode = $functionReturnCode."
+	                    $returnCode = 0
+                        $exitFlag = $false 
+                    }
+                    else {
+		                Write-Host -1 "Return from execute_with_retry was FAILURE with functionReturnCode = $functionReturnCode."
+	                    $returnCode = 1
+                        $exitFlag = $true
+                    }
+
+				}
+				else {
+					# If Datasource is a FQDN, get the domain from the datasource itself
+					If ($datasource.ToUpper().EndsWith(".COM")) {
+						$domainname = $datasource.Split(".")[1]
+						$datasource = $datasource.Split(".")[0]
+					}
+
+					if ($noop -and $force) {
+						& db_remote_wrap.ps1 -domainname $domainname -username $username -datasource $datasource -dbServerNodes $dbServerNodes -database $database -dbtriggerlist $dbtriggerlist `
+							-client $client_name -client_script_folder $client_script_folder -env_type $env_type -version $version -description $description -noop -force -ignore_deploy_lock $ignore_deploy_lock -log_file $global:logfile
+						$returncode = $lastexitcode
+					}
+					elseif ($noop) {
+						& db_remote_wrap.ps1 -domainname $domainname -username $username -datasource $datasource -dbServerNodes $dbServerNodes -database $database -dbtriggerlist $dbtriggerlist `
+							-client $client_name -client_script_folder $client_script_folder -env_type $env_type -version $version -description $description -noop -ignore_deploy_lock $ignore_deploy_lock -log_file $global:logfile
+						$returncode = $lastexitcode
+					}
+					elseif ($force) {
+						& db_remote_wrap.ps1 -domainname $domainname -username $username -datasource $datasource -dbServerNodes $dbServerNodes -database $database -dbtriggerlist $dbtriggerlist `
+							-client $client_name -client_script_folder $client_script_folder -env_type $env_type -version $version -description $description -force -ignore_deploy_lock $ignore_deploy_lock -log_file $global:logfile
+						$returncode = $lastexitcode
+					}
+					else {
+						& db_remote_wrap.ps1 -domainname $domainname -username $username -datasource $datasource -dbServerNodes $dbServerNodes -database $database -dbtriggerlist $dbtriggerlist `
+							-client $client_name -client_script_folder $client_script_folder -env_type $env_type -version $version -description $description -ignore_deploy_lock $ignore_deploy_lock -log_file $global:logfile
+						$returncode = $lastexitcode
+					}
+				}
+			}
+			else {
+				$exitflag = $true
+			}
+		}
+		
+		if (!($noIISflag)) {
+			# Recycle IIS App Pool
+			if ($returncode -eq "0") {
+				$apppoolname.Split(",") | ForEach {
+					# Specific to clients with webnodes (Scaleset)
+					If ($webnodes) {
+						$currentapppool = $_
+						$webnodes.Split(",") | ForEach {                        
+							# base execparams
+							if ($noop) {
+								write_log_info 2 "RUNNING IN NOOP MODE: Would have recycled apppool $currentapppool in WebNode $_"
+								$execparams = "list^apppool"
+							}
+							else {
+								write_log_info 2 "Remote recycle apppool $currentapppool for WebNode $_"
+								$execparams = "recycle^apppool^$currentapppool"
+							}
+							.\execute_remote.ps1 -domainname $domainname -servername $_ -username $username -workpath $inetsrvpath -command $appcmdpath -argumentlist $execparams `
+                                -log_file $global:logfile
+							$returncode = $lastexitcode
+							write_log_info 2 "Return Code: $returncode"
+						}
+					}
+					Else {
+						# Recycle app pool
+						if ($noop) {
+							& recycle_app_pool.ps1 -website_name $sitename -app_pool_name $_ -iis_ver $iisversion -noop -log_file $global:logfile
+							$returncode = $lastexitcode
+						}
+						else {
+							& recycle_app_pool.ps1 -website_name $sitename -app_pool_name $_ -iis_ver $iisversion -log_file $global:logfile
+							$returncode = $lastexitcode
+						}
+					}
+				}
+				
+				if (!$noop) {
+					# Sleep for a bit
+					write_log_info 2 "Sleeping for 10 seconds to allow the App Pools to complete starting up"
+					Start-Sleep -s 10
+				}
+				
+			}
+			else {
+				$exitflag = $true
+			}
+
+			if (!($skipFEDeploy)) {
+				if ($returncode -eq "0") {
+					# Maintenance Page Down (site online)
+					if ($noop) {
+						& set_website_availability.ps1 -webroot $appofflinepath -state online -noop -log_file $global:logfile
+						$returncode = $lastexitcode
+					}
+					else {
+						& set_website_availability.ps1 -webroot $appofflinepath -state online -log_file $global:logfile
+						$returncode = $lastexitcode
+					}
+				}
+				else {
+					$exitflag = $true
+				}
+			}
+
+			if ($returncode -eq "0") {
+				If (!($webnodes)) {
+					$apppoolname.Split(",") | ForEach {
+						# Verify app pool
+						if ($noop) {
+							& verify_app_pool_state.ps1 -app_pool_name $_ -noop -log_file $global:logfile
+							$returncode = $lastexitcode
+						}
+						else {
+							& verify_app_pool_state.ps1 -app_pool_name $_ -log_file $global:logfile
+							$returncode = $lastexitcode
+						}
+					}
+				}
+			}
+			else {
+				$exitflag = $true
+			}
+		}
+
+        if ($exitflag) {
+            $error_msg = "Error occurred in Gateway Deploy for $client_name $env_type Environment."
+            write_log_info -1 $error_msg
+            throw $error_msg
+        }
+        else {
+            if ($noop) {
+                write_log_info 1 "RUNNING IN NOOP MODE: Finished Gateway Deploy for $client_name $env_type Environment"
+            }
+            else {
+                write_log_info 0 "Finished Gateway Deploy for $client_name $env_type Environment"
+            }
+            write_log_info 2 "***************************************************************`n"
+			if (!($noIISflag)) {
+				If ((Test-Path $carrierlockpath) -and !($skipFEDeploy)) {
+					Remove-Item $carrierlockpath -Recurse -Force
+				}
+			}
+        }
+    }
+    Catch {
+        write_log_message -1 "Gateway Deploy Failed for $client_name $env_type Environment"
+        write_log_message -1 $_.Exception|format-list -force
+		if (!($noIISflag)) {
+			If ((Test-Path $carrierlockpath) -and !($skipFEDeploy)) {
+				Remove-Item $carrierlockpath -Recurse -Force
+			}
+		}
+        throw $_.Exception|format-list -force
+    }
+} else {
+	$error_msg = "Error occurred in Gateway Deploy for $client_name $env_type Environment."
+	write_log_info -1 $error_msg
+	throw $error_msg
+}
