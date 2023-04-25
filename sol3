@@ -1,0 +1,17 @@
+$PSPolicy = Get-ExecutionPolicy
+$MaxMemoryPerShellMB = (Get-Item WSMan:\localhost\Shell\MaxMemoryPerShellMB).Value 
+$MaxEnvelopeSizeKB = (Get-Item WSMan:\localhost\MaxEnvelopeSizeKB).Value
+$BigDataSessionConfig = Get-PSSessionConfiguration -Name BigData -ErrorAction SilentlyContinue
+$psmaximumreceiveddatasizepercommandmb = $BigDataSessionConfig.MaximumReceivedDataSizePerCommandMB
+$psmaximumreceivedobjectsizemb = $BigDataSessionConfig.MaximumReceivedObjectSizeMB
+
+if (($PSPolicy.ToString() -eq "RemoteSigned")  -and ($MaxMemoryPerShellMB -gt 2147483640) -and ($MaxEnvelopeSizeKB -gt 2045) -and ($psmaximumreceiveddatasizepercommandmb -eq 500) -and ($psmaximumreceivedobjectsizemb -eq 500)) {
+    Write-Host "Success"
+} else {
+    Write-Host "Failure"
+    Write-Host "Policy :$PSPolicy expecting value should be RemoteSigned"
+    Write-Host "MaxMemoryPerShellMB:$MaxMemoryPerShellMB expecting value more than 2147483640"
+    Write-Host "MaxEnvelopeSizeKB:$MaxEnvelopeSizeKB expecting value more than 2045"
+    Write-Host "psmaximumreceiveddatasizepercommandmb:$psmaximumreceiveddatasizepercommandmb expecting value should be 500"
+    Write-Host "psmaximumreceivedobjectsizemb:$psmaximumreceivedobjectsizemb expecting value should be 500"
+}
