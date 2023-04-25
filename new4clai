@@ -1,0 +1,12 @@
+f ($returncode -eq "0") {
+            if ($noop) {
+                & set_website_availability.ps1 -webroot $appofflinepath -state online -noop -log_file $global:logfile
+                $returncode = $lastexitcode
+            } else {
+                & set_website_availability.ps1 -webroot $appofflinepath -state online -log_file $global:logfile
+                $returncode = $lastexitcode
+            }
+        } else {
+            $exitflag = $true
+        }
+        write_log_info 2 "After set_website_availability, returncode=$returncode, lastexitcode=$lastexitcode, exitflag=$exitflag."
