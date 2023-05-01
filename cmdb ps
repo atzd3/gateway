@@ -1,0 +1,130 @@
+Here's a PowerShell script that can generate a CMDB entry based on a template and a parameter file. Create three files: the script Generate-CMDBEntry.ps1, a template file cmdb_template.txt, and a parameter file parameters.json.
+
+Generate-CMDBEntry.ps1 script:
+
+
+param(
+    [string]$TemplatePath = "cmdb_template.txt",
+    [string]$ParameterFilePath = "parameters.json",
+    [string]$OutputFilePath = "generated_cmdb_entry.txt"
+)
+
+function ConvertTo-HashtableFromJsonFile($FilePath) {
+    $jsonContent = Get-Content -Path $FilePath -Raw
+    $hashTable = ConvertFrom-Json -InputObject $jsonContent
+    return $hashTable
+}
+
+function Expand-Template($Template, $Parameters) {
+    foreach ($key in $Parameters.Keys) {
+        $value = $Parameters[$key]
+        if ($value -is [System.Collections.ArrayList]) {
+            $value = $value -join ", "
+        }
+        $Template = $Template.Replace("{{ $key }}", $value)
+    }
+    return $Template
+}
+
+# Load the template
+$template = Get-Content -Path $TemplatePath -Raw
+
+# Load the parameter file
+$parameters = ConvertTo-HashtableFromJsonFile -FilePath $ParameterFilePath
+
+# Default values based on standards
+$parameters['file_paths'] = $parameters['file_paths'] -as [string] -or '/standard/file/path'
+$parameters['schema_names'] = $parameters['schema_names'] -as [string] -or 'StandardSchema'
+$parameters['web_config_type'] = $parameters['web_config_type'] -as [string] -or 'StandardWebConfig'
+$parameters['db_deploy_method'] = $parameters['db_deploy_method'] -as [string] -or 'StandardDBDeploy'
+
+# Render the template using the parameters
+$cmdbEntry = Expand-Template -Template $template -Parameters $parameters
+
+# Save the rendered CMDB entry to the output file
+Set-Content -Path $OutputFilePath -Value $cmdbEntry
+
+Write-Host "CMDB entry generated successfully."
+
+
+
+
+
+
+
+
+
+cmdb_template.txt template file:
+
+
+
+
+
+
+Client Name: {{ client_name }}
+Client Environment: {{ client_environment }}
+URL: {{ url }}
+Server Names: {{ server_names }}
+Database Names: {{ database_names }}
+Service Account Names: {{ service_account_names }}
+Supported Applications: {{ supported_applications }}
+IIS Version: {{ iis_version }}
+File Paths: {{ file_paths }}
+Schema Names: {{ schema_names }}
+WebConfig Type: {{ web_config_type }}
+DB Deploy Method: {{ db_deploy_method }}
+
+
+
+parameters.json parameter file:
+
+
+
+
+
+
+
+
+
+
+{
+  "client_name": "ExampleClient",
+  "client_environment": "Production",
+  "url": "https://exampleclient.com",
+  "server_names": ["Server1", "Server2"],
+  "database_names": ["DB1", "DB2"],
+  "service_account_names": ["ServiceAccount1", "ServiceAccount2"],
+  "supported_applications": ["App1", "App2"],
+  "iis_version": "10.0"
+}
+
+
+
+
+
+
+
+
+
+
+Run the script with:
+
+
+
+
+
+
+
+
+
+
+.\Generate-CMDBEntry.ps1 -TemplatePath "cmdb_template.txt" -ParameterFilePath "parameters.json" -OutputFilePath "generated_cmdb_entry.txt"
+
+
+
+
+
+The script will generate a CMDB entry in the generated_cmdb_entry.txt file based on the given template and parameters. Adjust the parameter file and template as needed.
+
+
+
