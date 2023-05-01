@@ -1,0 +1,143 @@
+import json
+from jinja2 import Environment, FileSystemLoader
+
+def generate_cmdb_entry(template_path, parameter_file_path, output_file_path):
+    # Load the template
+    env = Environment(loader=FileSystemLoader(searchpath="./"))
+    template = env.get_template(template_path)
+
+    # Load the parameter file
+    with open(parameter_file_path, "r") as param_file:
+        params = json.load(param_file)
+
+    # Default values based on standards
+    params["file_paths"] = params.get("file_paths", "/standard/file/path")
+    params["schema_names"] = params.get("schema_names", "StandardSchema")
+    params["web_config_type"] = params.get("web_config_type", "StandardWebConfig")
+    params["db_deploy_method"] = params.get("db_deploy_method", "StandardDBDeploy")
+
+    # Render the template using the parameters
+    cmdb_entry = template.render(params)
+
+    # Save the rendered CMDB entry to the output file
+    with open(output_file_path, "w") as output_file:
+        output_file.write(cmdb_entry)
+
+    print("CMDB entry generated successfully.")
+
+
+if __name__ == "__main__":
+    template_path = "cmdb_template.txt"
+    parameter_file_path = "parameters.json"
+    output_file_path = "generated_cmdb_entry.txt"
+    generate_cmdb_entry(template_path, parameter_file_path, output_file_path)
+    
+    
+    now ow, create a template file cmdb_template.txt:
+    
+    
+    
+    
+    
+    
+    
+    
+    Client Name: {{ client_name }}
+Client Environment: {{ client_environment }}
+URL: {{ url }}
+Server Names: {% for server in server_names %}{{ server }}{% if not loop.last %}, {% endif %}{% endfor %}
+Database Names: {% for database in database_names %}{{ database }}{% if not loop.last %}, {% endif %}{% endfor %}
+Service Account Names: {% for service_account in service_account_names %}{{ service_account }}{% if not loop.last %}, {% endif %}{% endfor %}
+Supported Applications: {% for application in supported_applications %}{{ application }}{% if not loop.last %}, {% endif %}{% endfor %}
+IIS Version: {{ iis_version }}
+File Paths: {{ file_paths }}
+Schema Names: {{ schema_names }}
+WebConfig Type: {{ web_config_type }}
+DB Deploy Method: {{ db_deploy_method }}
+
+
+
+And a parameter file parameters.json:
+
+
+
+
+{
+  "client_name": "ExampleClient",
+  "client_environment": "Production",
+  "url": "https://exampleclient.com",
+  "server_names": ["Server1", "Server2"],
+  "database_names": ["DB1", "DB2"],
+  "service_account_names": ["ServiceAccount1", "ServiceAccount2"],
+  "supported_applications": ["App1", "App2"],
+  "iis_version": "10.0"
+}
+
+
+
+
+
+
+
+
+Run the script, and it will generate a CMDB entry in the generated_cmdb_entry.txt file based on the given template and parameters. Adjust the parameter file and template as needed.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Here's a Python script that can generate a CMDB entry based on a template and a parameter file. It uses the Jinja2 templating engine, which you can install using pip install jinja2 if you don't have it already.
+
+python
+Copy code
+import json
+from jinja2 import Environment, FileSystemLoader
+
+def generate_cmdb_entry(template_path, parameter_file_path, output_file_path):
+    # Load the template
+    env = Environment(loader=FileSystemLoader(searchpath="./"))
+    template = env.get_template(template_path)
+
+    # Load the parameter file
+    with open(parameter_file_path, "r") as param_file:
+        params = json.load(param_file)
+
+    # Default values based on standards
+    params["file_paths"] = params.get("file_paths", "/standard/file/path")
+    params["schema_names"] = params.get("schema_names", "StandardSchema")
+    params["web_config_type"] = params.get("web_config_type", "StandardWebConfig")
+    params["db_deploy_method"] = params.get("db_deploy_method", "StandardDBDeploy")
+
+    # Render the template using the parameters
+    cmdb_entry = template.render(params)
+
+    # Save the rendered CMDB entry to the output file
+    with open(output_file_path, "w") as output_file:
+        output_file.write(cmdb_entry)
+
+    print("CMDB entry generated successfully.")
+
+
+if __name__ == "__main__":
+    template_path = "cmdb_template.txt"
+    parameter_file_path = "parameters.json"
+    output_file_path = "generated_cmdb_entry.txt"
+    generate_cmdb_entry(template_path, parameter_file_path, output_file_path)
+Now, create a template file cmdb_template.txt:
