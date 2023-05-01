@@ -1,0 +1,32 @@
+In scope:
+- Script to generate a CMDB entry for an environment, based upon a template and a parameter file
+- Script checked into TFS
+- Applications (AdminPortal, Claims, Billing, WebServices, Enrollment, Adjudication, ControlM Billing)
+
+Out of scope:
+- Any application not listed above (will be handled thru additional tickets later)
+- Generating hash files for DB credentials (will be a separate ticket)
+- Updating the CMDB in TFS (will copy/paste the results for now)
+
+
+
+
+
+Create a script that can be used to generate a CMDB entry based upon a template and a parameter file.   Intent is to generate a CMDB entry that can be copy/pasted into TFS.
+
+Parameters should include
+
+Client Name
+Client Environment
+URL
+Server names
+Database names
+Service account names
+Supported applications
+IIS version
+Values that should be generated based upon standards
+
+File paths
+Schema names
+WebConfig Type
+DB Deploy method
