@@ -1,0 +1,14 @@
+
+13:35:09  <>  5/15/2023 2:35:09 PM : ERROR : INDEPENDENT-PDP PROD environment: Version tracking failed for module CLAIMS version NOOP (IHBNC_OWNER, ibncihp2)
+13:35:09  <>
+13:35:09  <><><><><><><><><><><><><><><><><><><><>
+13:35:09  
+13:35:09  
+13:35:09  <><><><><><><><><><><><><><><><><><><><>
+13:35:09  <>
+13:35:09  <>  5/15/2023 2:35:09 PM : ERROR : System.Management.Automation.MethodInvocationException: Exception calling "Open" with "0" argument(s): "ORA-12154: TNS:could not resolve the connect identifier specified" ---> Oracle.DataAccess.Client.OracleException: ORA-12154: TNS:could not resolve the connect identifier specified
+13:35:09     at Oracle.DataAccess.Client.OracleException.HandleErrorHelper(Int32 errCode, OracleConnection conn, IntPtr opsErrCtx, OpoSqlValCtx* pOpoSqlValCtx, Object src, String procedure, Boolean bCheck)
+13:35:09     at Oracle.DataAccess.Client.OracleException.HandleError(Int32 errCode, OracleConnection conn, IntPtr opsErrCtx, Object src)
+13:35:09     at Oracle.DataAccess.Client.OracleConnection.Open()
+13:35:09     at CallSite.Target(Closure , CallSite , Object )
+13:35:09     --- End of inner exception stack trace ---
