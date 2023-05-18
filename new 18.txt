@@ -1,0 +1,408 @@
+# --------------------------------------------------------
+# Script: deploy_claims_platform.ps1
+# Developer: gselvan
+# Date: 03/06/17
+# Comments: Based on environment parameters, read data 
+# from config file and perform all steps for claims platform deploy.
+# ScriptsPath is derived from execution context
+# --------------------------------------------------------
+
+#
+# --------------------------------------------------------
+# Includes and params()
+# --------------------------------------------------------
+#
+
+param(
+    [string]$client_name = "",
+    [string]$env_type = "",
+    [string]$version = "",
+    [string]$module = "",
+    [string]$noop = "false",
+    [string]$force = "false",
+    [string]$log_file=""
+)
+
+$global:logfile = $log_file
+. .\logging_helpers.ps1
+. .\utility_helpers.ps1
+
+#
+# --------------------------------------------------------
+# Functions
+# --------------------------------------------------------
+#
+
+function read_config_xml ($client, $envtype) {
+    If (Test-Path $cmdbname) {
+        Try {
+            #Get XML Content
+            $configxmlfile = Join-Path $scriptspath $cmdbname
+            [xml]$file = Get-Content $configxmlfile
+            $ns = new-object Xml.XmlNamespaceManager $file.NameTable
+            $ns.AddNamespace("cfg", $schemanamespace)
+
+            $script:integratedflag = $file.SelectSingleNode('/cfg:Environments/cfg:Client[@Name="' + $client.ToUpper() + '" and @Environment="' + $envtype.ToUpper() + '"]/cfg:ClaimsPlatform/cfg:ModuleFlags/cfg:AdminPortal', $ns).InnerXml
+            $script:gw_ws_flag = $file.SelectSingleNode('/cfg:Environments/cfg:Client[@Name="' + $client.ToUpper() + '" and @Environment="' + $envtype.ToUpper() + '"]/cfg:ClaimsPlatform/cfg:ModuleFlags/cfg:WebServices', $ns).InnerXml
+
+            $file.SelectNodes('/cfg:Environments/cfg:Client[@Name="' + $client.ToUpper() + '" and @Environment="' + $envtype.ToUpper() + '"]/cfg:ClaimsPlatform/cfg:Web[@Server="' + $env:computername + '"]', $ns) | % { 
+                write_log_info 2 "Retrieving config Params section for configured server and host: $env:computername..."
+                
+                $script:domainname = $_.SelectSingleNode('cfg:DomainName', $ns).innerxml
+				$script:username = $_.SelectSingleNode('cfg:UserName', $ns).innerxml
+                $script:webnodes = $_.SelectSingleNode('cfg:WebNodes', $ns).innerxml
+                $script:servername = $env:computername
+                $script:iisversion = $_.SelectSingleNode('cfg:IISVersion', $ns).innerxml
+
+                $script:sitename = $_.SelectSingleNode('cfg:PlatformSites/cfg:SiteName', $ns).innerxml
+                $script:apppoolname = $_.SelectSingleNode('cfg:PlatformSites/cfg:AppPoolName', $ns).innerxml
+                $script:carrierpath = $_.SelectSingleNode('cfg:PlatformSites/cfg:CarrierPath', $ns).innerxml
+                $script:copyexclude = $_.SelectSingleNode('cfg:PlatformSites/cfg:CarrierPath', $ns).GetAttribute("CopyExclude") #.CopyExclude should also work
+                $script:carrierbackuppath = $_.SelectSingleNode('cfg:PlatformSites/cfg:CarrierBackupPath', $ns).innerxml
+                $script:backupretain = $_.SelectSingleNode('cfg:PlatformSites/cfg:CarrierBackupPath', $ns).GetAttribute("Retain") #.Retain should also work
+                $script:accountsfolder = $_.SelectSingleNode('cfg:PlatformSites/cfg:AccountsPath', $ns).innerxml
+				$script:excludebackupfolders = $_.SelectSingleNode('cfg:PlatformSites/cfg:Excludefolders', $ns).innerxml
+
+                If ($module -eq "WEBSERVICES") {
+                    $script:carrierpath = $_.SelectSingleNode('cfg:PlatformSites/cfg:WebServicesPath', $ns).innerxml
+                }
+				If ($module -eq "ADMIN_PORTAL") {
+                    $script:carrierpath = $_.SelectSingleNode('cfg:PlatformSites/cfg:AccountsPath', $ns).innerxml
+                    $script:carrierpathParent = Split-Path -Path "$script:carrierpath" -Parent
+					
+					$script:adminisrationPath = Join-Path $script:carrierpathParent 'Administration'
+					$script:coreservicesPath = Join-Path $script:carrierpathParent 'CoreServices'
+					
+					$script:carrierbackuppathParent = Split-Path -Path "$script:carrierbackuppath" -Parent
+					$script:adminPortalBackupPath = Join-Path $script:carrierbackuppathParent 'AdminPortal'
+				}
+                If ($gw_ws_flag -eq "Y") {
+                    $script:webservicespath = $_.SelectSingleNode('cfg:PlatformSites/cfg:WebServicesPath', $ns).innerxml
+                }
+
+                If ($integratedflag.ToUpper() -eq "Y") {
+                    $script:appofflinepath = $accountsfolder
+                }
+                Else {
+                    $script:appofflinepath = $carrierpath
+                }
+            }
+
+            # Checking if the params are populated (main value apppoolname is checked); Log and flag if blank
+            If ([string]::IsNullOrEmpty($script:apppoolname)) {
+                write_log_message -1 "Missing config values: Cannot find the config section for $client $envtype environment targeting $env:computername. Abort."
+                $script:exitflag = $true
+            }
+        }
+        Catch {
+            write_log_message -1 "Failed to read the config XML file for $client $envtype. Abort. " + $_
+            write_log_message -1 $_.Exception|format-list -force
+            $script:exitflag = $true
+        }
+    }
+    Else {
+        write_log_message -1 "Config file $cmdbname not found. Abort."
+        $script:exitflag = $true
+    }
+}
+
+function Get-ScriptDirectory () {
+    Split-Path $script:MyInvocation.MyCommand.Path
+}
+
+#
+# --------------------------------------------------------
+# Variables
+# --------------------------------------------------------
+#
+$domainname = ""
+$webnodes = ""
+$servername = ""
+$sitename = ""
+$apppoolname = ""
+$iisversion = ""
+$carrierpath = ""
+$copyexclude = ""
+$backupinclude = ""
+$backupexclude = ""
+$backupexcludeflag = $false
+$integratedflag = ""
+$gw_ws_flag = ""
+$appofflinepath = ""
+$accountsfolder = ""
+$carrierbackuppath = ""
+$webservicespath = ""
+$backupretain = ""
+$exitflag = $false
+$scriptspath = Get-ScriptDirectory
+$global:workpath = (get-item $scriptspath).parent.FullName
+$returncode = 0 # To store exit codes from child scripts; success 0; failure - other than 0
+$schemanamespace = "http://schemas.ikasystems.com/webserver/config"
+$cmdbname = "Advantasure_Product_Environments.xml"
+[bool]$noop = [System.Convert]::ToBoolean($noop)
+[bool]$force = [System.Convert]::ToBoolean($force)
+$username = ""
+$inetsrvpath = Join-Path $env:SystemRoot "System32\inetsrv"
+$appcmdpath = Join-Path $inetsrvpath "appcmd.exe"
+
+#
+# --------------------------------------------------------
+# Script body
+# --------------------------------------------------------
+#
+
+write_log_info 2 "***************************************************************"
+if ($noop) {
+    write_log_info 1 "RUNNING IN NOOP MODE: Starting $module Deploy for $client_name $env_type environment in current machine $env:computername"
+}
+else {
+    write_log_info 2 "Starting $module Deploy for $client_name $env_type environment in current machine $env:computername"
+}
+
+# Add the scriptspath to environment variable
+if ($Env:Path -notlike $scriptspath) {
+    [Environment]::SetEnvironmentVariable("Path", $Env:Path + ";$scriptspath")
+}
+
+
+# Call function to check if the user is admin
+$retoutput = check_admin 
+
+# If user is not admin, exit the script with error code.
+If (!($retoutput)) {
+    $script:exitflag = $true
+}
+
+# Call function to read contents from the config xml based on the passed parameters
+read_config_xml $client_name $env_type
+
+# If no errors, invoke the atomic scripts to perform individual tasks
+If (!$exitflag) {
+    Try {
+        # Maintenance Page Up (site offline)
+        If ($noop) {
+            & set_website_availability.ps1 -webroot $appofflinepath -state offline -noop -log_file $global:logfile
+            $returncode = $lastexitcode
+        } else {
+            & set_website_availability.ps1 -webroot $appofflinepath -state offline -log_file $global:logfile
+            $returncode = $lastexitcode
+        }
+        write_log_info 2 "After set_website_availability, returncode=$returncode, lastexitcode=$lastexitcode, exitflag=$exitflag."
+
+        # Backup existing folder
+        if ($returncode -eq "0") {
+            # For gw-claims integrated, non webservice deploys
+            If ($gw_ws_flag -eq "Y" -and $module -ne "WEBSERVICES") {
+                If ($webservicespath -like "$carrierpath\*") {
+                    write_log_info 2 "GW-Claims Integration service folder $webservicespath is part of carrier: $carrierpath"
+                    #Get services web.config Content
+                    $webconfigfile = Join-Path $webservicespath web.config
+                    [xml]$configxml = Get-Content $webconfigfile
+                    $loglocation = $configxml.SelectSingleNode('/configuration/appsettings/add[@key="LOGLOCATION"]').Value
+                    If ([string]::IsNullOrEmpty($loglocation)) {
+                        write_log_info 2 "LOGLOCATION is empty. Log folders created by default in $webservicespath will be excluded from backup."
+                        $backupexcludeflag = $true
+						$backupexclude = "*Log*" + "," + $excludebackupfolders
+                        $fso = New-Object -ComObject Scripting.FileSystemObject
+
+                        write_log_info 2 "Log folders that will be excluded from backup ($backupexclude):"
+                        Get-ChildItem $webservicespath | Where-Object {$_.PSIsContainer -and $_.FullName -like '*log*'} | % {
+                            #$size = [math]::Round($fso.GetFolder($_.FullName).Size / 1024 / 1024 / 1024, 2)
+                            #$content = "Folder - {0} (Size - {1} GB)" -f $_.FullName, $size
+                            $content = "Folder - {0}" -f $_.FullName
+                            write_log_info 2 $content
+                        }
+                    } Else {
+                        write_log_info 2 "LOGLOCATION is configured to $loglocation. No exclusions during backup."
+                    }
+                }
+            }
+            if ($noop) {
+				if ($module -eq 'ADMIN_PORTAL') {
+					$backupinclude = @('Accounts','Administration','CoreServices')
+					
+					& backup_site_content.ps1 -webroot $carrierpathParent -module 'ADMIN_PORTAL' -backup_path $adminPortalBackupPath -client $client_name -retain $backupretain -include $backupinclude -noop -log_file $global:logfile
+					$returncode = $lastexitcode
+				} else {
+					& backup_site_content.ps1 -webroot $carrierpath -backup_path $carrierbackuppath -client $client_name -retain $backupretain -exclude $excludebackupfolders -noop -log_file $global:logfile
+					$returncode = $lastexitcode
+				}
+				
+            } else {
+				if ($module -eq 'ADMIN_PORTAL') {
+					$backupinclude = @('Accounts','Administration','CoreServices')
+					
+					& backup_site_content.ps1 -webroot $carrierpathParent -module 'ADMIN_PORTAL' -backup_path $adminPortalBackupPath -client $client_name -retain $backupretain -include $backupinclude -log_file $global:logfile
+					$returncode = $lastexitcode
+				} else {
+					If ($backupexcludeflag) {
+						& backup_site_content.ps1 -webroot $carrierpath -backup_path $carrierbackuppath -client $client_name -retain $backupretain -exclude $backupexclude -log_file $global:logfile
+						$returncode = $lastexitcode
+					} else {
+						& backup_site_content.ps1 -webroot $carrierpath -backup_path $carrierbackuppath -client $client_name -retain $backupretain -exclude $excludebackupfolders -log_file $global:logfile
+						$returncode = $lastexitcode
+					}
+				}
+            }
+
+        } else {
+            $exitflag = $true
+        }
+        write_log_info 2 "After backup_site_content, returncode=$returncode, lastexitcode=$lastexitcode, exitflag=$exitflag."
+
+        #Create and Download report for old files
+        if ($noop) {
+            write_log_info 2 "Create Old files report for $module $client_name $env_type Environment"
+            $currentDate = Get-Date -Format MMddyyyy
+            $filereport = Join-Path $workpath "$client_name-$env_type-$module-$currentDate-OldFiles.csv"
+            $date = (get-date).AddDays(-180)
+
+            # finds files older than 6 months in source directory and saves as variable
+            try {
+                (Get-ChildItem -Path $carrierpath -Recurse -File) |
+                    Where-Object { $_.lastwritetime -lt $date } |
+                    Sort-Object Length -Descending | Select Directory,PSChildName,LastWriteTime |
+                    Export-Csv -NoTypeInformation -Force $filereport
+            }
+            catch {
+                write_log_message -1 "$module Getting old files report Failed for $client_name $env_type Environment"
+                write_log_message -1 $_.Exception|format-list -force
+            }
+        }
+
+        # Deploy site folder
+        if ($returncode -eq "0") {
+            if ($noop) {
+				if ($module -eq 'ADMIN_PORTAL') {
+					& copy_deploy_content.ps1 -webroot $carrierpathParent -copyexclude $copyexclude -noop -log_file $global:logfile
+					$returncode = $lastexitcode
+				} else {
+					& copy_deploy_content.ps1 -webroot $carrierpath -copyexclude $copyexclude -noop -log_file $global:logfile
+					$returncode = $lastexitcode
+				}
+                
+            } else {
+				if ($module -eq 'ADMIN_PORTAL') {
+					 copy_deploy_content.ps1 -webroot $carrierpathParent -copyexclude $copyexclude  -log_file $global:logfile
+					$returncode = $lastexitcode
+				} else {
+					& copy_deploy_content.ps1 -webroot $carrierpath -copyexclude $copyexclude -log_file $global:logfile
+					$returncode = $lastexitcode
+				}
+                
+            }
+        } else {
+            $exitflag = $true
+        }
+        write_log_info 2 "After copy_deploy_content, returncode=$returncode, lastexitcode=$lastexitcode, exitflag=$exitflag."
+
+        # Recycle app pool
+        if ($returncode -eq "0") {
+            $apppoolname.Split(",") | ForEach {
+                # Specific to clients with webnodes (Scaleset)
+                If ($webnodes) {
+                    $currentapppool = $_
+                    $webnodes.Split(",") | ForEach {                       
+                        # base execparams
+                        if ($noop) {
+                            write_log_info 2 "RUNNING IN NOOP MODE: Would have recycled apppool $currentapppool in WebNode $_"
+                            $execparams = "list^apppool^^$global:logfile"
+                        } else {
+                            write_log_info 2 "Remote recycle apppool $currentapppool for WebNode $_"
+                            $execparams = "recycle^apppool^$currentapppool^$global:logfile"
+                        }
+                        .\execute_remote.ps1 -domainname $domainname -servername $_ -username $username -workpath $inetsrvpath -command $appcmdpath -argumentlist $execparams
+                        $returncode = $lastexitcode
+                        write_log_info 2 "Return Code: $returncode"
+                    }
+                } Else {
+                    if ($noop) {
+                        & recycle_app_pool.ps1 -website_name $sitename -app_pool_name $_ -iis_ver $iisversion -noop -log_file $global:logfile
+                        $returncode = $lastexitcode
+                    } else {
+                        & recycle_app_pool.ps1 -website_name $sitename -app_pool_name $_ -iis_ver $iisversion -log_file $global:logfile
+                        $returncode = $lastexitcode
+                    }
+                }
+            }
+        } else {
+            $exitflag = $true
+        }
+        write_log_info 2 "After recycle_app_pool, returncode=$returncode, lastexitcode=$lastexitcode, exitflag=$exitflag."
+
+        # Maintenance Page Down (site online)
+        if ($returncode -eq "0") {
+            if ($noop) {
+                & set_website_availability.ps1 -webroot $appofflinepath -state online -noop -log_file $global:logfile
+                $returncode = $lastexitcode
+            } else {
+                & set_website_availability.ps1 -webroot $appofflinepath -state online -log_file $global:logfile
+                $returncode = $lastexitcode
+            }
+        } else {
+            $exitflag = $true
+        }
+        write_log_info 2 "After set_website_availability, returncode=$returncode, lastexitcode=$lastexitcode, exitflag=$exitflag."
+
+        # Verify app pool
+        if ($returncode -eq "0") {
+            If (!($webnodes)) {
+                $apppoolname.Split(",") | ForEach {
+                    if ($noop) {
+                        & verify_app_pool_state.ps1 -app_pool_name $_ -noop -log_file $global:logfile
+                        $returncode = $lastexitcode
+                    } else {
+                        & verify_app_pool_state.ps1 -app_pool_name $_ -log_file $global:logfile
+                        $returncode = $lastexitcode
+                    }
+                }
+            }
+        } else {
+            $exitflag = $true
+        }
+        write_log_info 2 "After verify_app_pool_state, returncode=$returncode, lastexitcode=$lastexitcode, exitflag=$exitflag."
+
+        if ($exitflag) {
+            $error_msg = "Error occurred in $module Deploy for $client_name $env_type Environment."
+            write_log_info -1 $error_msg
+            throw $error_msg
+        } else {
+            if ($noop) {
+                write_log_info 1 "RUNNING IN NOOP MODE: Finished $module Deploy for $client_name $env_type Environment"
+            } else {
+                write_log_info 0 "Finished $module Deploy for $client_name $env_type Environment"
+            }
+            write_log_info 2 "***************************************************************`n"
+        }
+    }
+    Catch {
+        write_log_message -1 "$module Deploy Failed for $client_name $env_type Environment"
+        write_log_message -1 $_.Exception|format-list -force
+        throw $_.Exception|format-list -force
+    }
+}
+$PSPolicy = Get-ExecutionPolicy
+$MaxMemoryPerShellMB = Get-ItemPropertyValue -ErrorAction Stop HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WSMAN\Client MaxMemoryPerShellMB
+$MaxEnvelopeSizeKB=Get-ItemPropertyValue -ErrorAction Stop HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WSMAN\Client maxEnvelopeSize
+
+if ($returncode -eq "0") {
+    if (($noop) -and ($module -eq 'CLAIMS')){
+        if (($PSPolicy.ToString() -eq "RemoteSigned")  -and ($MaxMemoryPerShellMB -eq 2050)  -and ($MaxEnvelopeSizeKB -gt 2050)) {
+            write_log_info 2 "Success winrm commands"
+            $returncode = $lastexitcode
+        } else {
+            write_log_info 2 "Policy :$PSPolicy expecting value should be RemoteSigned"
+            $exitflag = $true
+        }
+        
+    } else {
+        
+            $returncode = $lastexitcode
+        
+        
+    }
+} else {
+    $exitflag = $true
+}
+write_log_info 2 "After copy_deploy_content, returncode=$returncode, lastexitcode=$lastexitcode, exitflag=$exitflag."
+

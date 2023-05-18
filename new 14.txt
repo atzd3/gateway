@@ -1,0 +1,100 @@
+ ####################
+# Common Variables #
+# ####################
+company     = "advantasure"
+app_name    = "windows"
+location    = "eastus2"
+
+##################
+# Authentication #
+##################
+azure-tenant-id       = "99f319d8-46a3-4b15-857e-8fb6d3f27527"
+azure-subscription-id = "802dca1e-480a-4fed-a103-320885ac5fc9"
+azure-client-id       = "89fa3fee-f546-464a-bd17-b9e35f46957a"
+azure-client-secret   = "ib-8Q~n-oEd_J_5perFX8PJ6euXsgEDKGaTo1b6_"
+###########
+# Network #
+###########
+# network-vnet-cidr   = "10.128.0.0/16"
+# network-subnet-cidr = "10.128.1.0/24"
+
+##################
+# VM Information #
+##################
+windows_vm_size        = "Standard_E16s_v3"
+Adv_admin_username = "tfadmin"
+Adv_admin_password="S3cr3nnts2456"
+
+/******* Environment Tag ***/
+adv_resource_tag_environment ="dev"
+adv_resource_tag_clientcode="TPOC"
+adv_resource_tag_businessunit ="Coreadmin"
+adv_resource_tag_builddate="02/02/2023"
+adv_resource_tag_buildby= "new"
+adv_resource_tag_applicationcode = "POC"
+adv_resource_tag_changerequestnumber = "TEST"
+adv_resource_tag_tier= "Tier4."
+adv_client_resource_group_name="test_POC-new"
+adv_resource_tag_purpose= "Terraform POC."
+adv_resource_billingowner= "test"
+adv_resource_supportowner ="test"
+# windows_vm_size ="null"
+# windows_admin_username="test-new-all"
+# windows_admin_password="test-new-all"
+adv_client_vnet_name= "shared.east2.ts"
+adv_client_webserversubnet_Name="shared.east2.ts.prod" //adv_clientApp_subnet 
+existing_resource_group="rqs_e2_shared"
+Adv_vm_name ="test-new-all"
+adv_client_utl_VM_NicIP="10.140.0.70"
+//environmentChar = substr(var.adv_resource_tag_environment,0,1)
+
+
+/** Unused*/
+Adv_delete_os_disk_on_termination="test-new-all"
+Adv_delete_data_disks_on_termination="test-new-all"
+adv_clientApp_subnet="test-new-all"
+adv_client_vnet_addressSpace="test-new-all"
+adv_client_webserversubnet_addressSpace="test-new-all"
+adv_client_webserver_nic_Name="test-new-all"
+adv_client_webserver_VMSS_Name="test-new-all"
+adv_client_utl_VM_Name="test-new-all"
+adv_Client_webServer_Scaleset="test-new-vmss"
+
+ 
+ 
+ 
+ # ####################
+# # Common Variables #
+# ####################
+# company     = "kopicloud"
+# prefix      = "kopi"
+# environment = "dev"
+# location    = "northeurope"
+# description = "Deploy a Windows VM Scale Set"
+# owner       = "Guillermo Musumeci"
+# app_name    = "IaaS"
+
+# ###########
+# # Network #
+# ###########
+# network-vnet-cidr = "10.10.0.0/16"
+# vm-subnet-cidr    = "10.10.1.0/24"
+
+# ##############
+# # Windows VM #
+# ##############
+# windows-vm-hostname    = "tfwinsrv" // Limited to 15 characters
+# windows-vm-size        = "Standard_B2s"
+# windows-vm-counter     = 2
+# windows-admin-username = "tfadmin"
+# windows-admin-password = "S3cr3ts24"
+Adv_admin_vmss-username = "tfadmin"
+Adv_admin_vmss-password="S3cr3nnts245"
+
+# ##################
+# # Authentication #
+# ##################
+# # azure-subscription-id = "complete-this"
+# # azure-client-id       = "complete-this"
+# # azure-client-secret   = "complete-this"
+# # azure-tenant-id       = "complete-this"

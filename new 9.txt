@@ -1,0 +1,812 @@
+# --------------------------------------------------------
+# Script: webconfig_remote_wrap.ps1
+# Developer: gselvan
+# Date: 09/11/2017
+# Comments: wrapper script for doing the prep, launching 
+# web.config and post activities
+# --------------------------------------------------------
+
+#
+# --------------------------------------------------------
+# Includes and params()
+# --------------------------------------------------------
+#
+param(
+    [Parameter(Mandatory = $True)][string]$product = "",
+    [Parameter(Mandatory = $True)][string]$operation = "",
+    [string]$client_name = "",
+    [string]$env_type = "",
+    [Parameter(Mandatory = $True)][string]$repo_path = "",
+    [string]$noop = "false",
+	[string]$ignore_deploy_lock,
+    [string]$started_by
+)
+
+#
+# --------------------------------------------------------
+# Functions
+# --------------------------------------------------------
+#
+
+function read_config_xml () {
+    If (Test-Path Visiant_Product_Environments.xml) {
+        Try {
+            #Get XML Content
+            $configxmlfile = Join-Path $invocationpath Visiant_Product_Environments.xml
+
+            #Read the file once and store the content in common variable
+            $script:CMDBfile = Get-Content $configxmlfile
+        }
+        Catch {
+            write_log_message -1 "read_config_xml: Failed to read the config XML file. Abort. " + $_
+            write_log_message -1 $_.Exception|format-list -force
+            $script:exitflag = $true
+        }
+    }
+    Else {
+        write_log_message -1 "Config file Visiant_Product_Environments.xml not found. Abort."
+        $script:exitflag = $true
+    }
+}
+
+function Download_Log_File() {
+    # Download the log file
+    $logfilepath = Join-Path $workpath ("Log_" + (Get-Date -Format MMddyyyy) + ".txt")
+
+    $execcommand = {param($logfilepath)
+        Return [IO.File]::ReadAllText($logfilepath)
+    }
+    $returncode = Invoke-Command -ScriptBlock $execcommand -Session $remotesession -ArgumentList $logfilepath
+    write_log_info 2 $returncode -silent
+}
+
+function Cleanup_Remote_Workspace() {
+    #region ########### CLEANUP REMOTE WORKSPACE - POST ###########
+    # execute the cleanup command
+    write_log_info 2 "webconfig_remote_wrap.ps1:  Starting scriptblock to check and cleanup remote workspace $workpath in $servername"
+                    
+    # construct command for cleanup destination after all operations
+    $execcommand = {param($workpath)
+                        cd \;
+						$cleanup_attempt_limit = 10
+						if (Test-Path $workpath) {
+							for($i=1; $i -le $cleanup_attempt_limit; $i++) {
+							Remove-Item $workpath -recurse -force -ErrorAction SilentlyContinue
+								if ($?) { return "Cleanup complete" }
+								elseif ($i -lt $cleanup_attempt_limit) { Start-Sleep -Seconds 2 }
+								else { return "Cleanup failed" }
+							}
+						}
+						else { return "Cleanup complete" }
+                    }
+    $returncode = Invoke-Command -ScriptBlock $execcommand -Session $remotesession -ArgumentList $workpath
+
+    write_log_info 2 "webconfig_remote_wrap.ps1:  Return from command: $returncode"
+    #endregion
+}
+
+function Config_Upload() {
+    $destination = Join-Path $repo_path "$product\$client_name\$env_type\FE_Deploy"
+
+    if (!(Test-Path $destination)) {
+        New-Item $destination -itemtype directory | Out-Null
+    }
+
+    #copy the config and hash files
+    Copy-Item $script:webconfigpath $destination
+	write_log_info 2 "Config file copied to $destination"
+	
+	If (Test-Path $script:webconfighashpath) {
+		Copy-Item $script:webconfighashpath $destination
+		write_log_info 2 "DB hash file copied to $destination"
+	}
+	
+	If (Test-Path $script:ssoHashPath) {
+		Copy-Item $script:ssoHashPath $destination
+		write_log_info 2 "SSO hash file copied to $destination"
+	}
+}
+
+function Log_Upload() {
+    if (!(Test-Path $releaselogpath)) {
+        write_log_info 2 "webconfig_remote_wrap.ps1:  Creating directory $releaselogpath because it does not exist."
+        New-Item $releaselogpath -itemtype directory -ErrorAction Stop | Out-Null
+        write_log_info 2 "webconfig_remote_wrap.ps1:  Successfully created directory $releaselogpath."
+    }
+
+    write_log_info 2 "webconfig_remote_wrap.ps1:  Constructing source and destination log file names and paths."
+    $srcdatetimestamp = Get-Date -Format MMddyyyy -ErrorAction Stop
+    $destdatetimestamp = Get-Date -Format MMddyyyy_mmss -ErrorAction Stop
+    $logfilepath = Join-Path $workpath "Log_$srcdatetimestamp.txt" -ErrorAction Stop
+    $renamedlogfilepath = "$client_name-$env_type-Log_$destdatetimestamp.txt"
+    $templogfilepath = Join-Path $workpath "$client_name-$env_type-Log_$destdatetimestamp.txt" -ErrorAction Stop
+    write_log_info 2 "webconfig_remote_wrap.ps1:  Successfully constructed log file name and path."
+
+    write_log_info 2 "webconfig_remote_wrap.ps1:  Renaming $logfilepath to $renamedlogfilepath."
+    Rename-Item $logfilepath $renamedlogfilepath -ErrorAction Stop
+    write_log_info 2 "webconfig_remote_wrap.ps1:  Successfully renamed $logfilepath."
+
+    write_log_info 2 "webconfig_remote_wrap.ps1:  Copying log $templogfilepath to $releaselogpath."
+    Copy-Item $templogfilepath $releaselogpath -ErrorAction Stop
+    write_log_info 2 "webconfig_remote_wrap.ps1:  Successfully copied log $templogfilepath to $releaselogpath"
+}
+
+function initiate_web ($client_env_node) {
+    #If Gateway is configured
+    If (($client_env_node.Gateway) -and ($product -eq "GATEWAY")) {
+        $script:attributename = "DBConnection"
+        If ($client_env_node.SelectNodes('cfg:Gateway', $ns).Count -gt 1) {
+            $script:multiserverflag = $true
+        }
+        $client_env_node.SelectNodes('cfg:Gateway', $ns) | % { 
+            $script:servername = $_.Server 
+            $script:domainname = $_.SelectSingleNode('cfg:DomainName', $ns).innerxml
+            $script:carrierpath = $_.SelectSingleNode('cfg:CarrierPath', $ns).innerxml
+            $script:carrierbackuppath = $_.SelectSingleNode('cfg:CarrierBackupPath', $ns).innerxml
+            remote_operation
+        }        
+    }
+    #If ClaimsPlatform is configured
+    ElseIf (($client_env_node.ClaimsPlatform) -and ($product -eq "CLAIMSPLATFORM")) {
+        $claimsplatform = $client_env_node.ClaimsPlatform
+        $script:attributename = "Oracle Connection"
+        If ($claimsplatform.SelectNodes('cfg:Web', $ns).Count -gt 1) {
+            $script:multiserverflag = $true
+        }
+        $claimsplatform.SelectNodes('cfg:Web', $ns) | % { 
+            $script:servername = $_.Server 
+            $script:domainname = $_.SelectSingleNode('cfg:DomainName', $ns).innerxml
+            $script:carrierpath = $_.SelectSingleNode('cfg:PlatformSites/cfg:CarrierPath', $ns).innerxml
+            $script:carrierbackuppath = $_.SelectSingleNode('cfg:PlatformSites/cfg:CarrierBackupPath', $ns).innerxml
+            remote_operation
+        }        
+    }
+}
+
+function Encrypt_SecureStrings() {
+	try {
+		# Clear out array of any previous data
+		$hashoutputArray.Clear()
+		$ssohashoutputArray.Clear()
+	
+		#Get XML Content
+		write_log_info 2 "Parsing web.config content for attributes starting with $script:attributename"
+		#Remove namespace for xml loading (some web.configs have - possibly different - ns, some dont have ns)
+		#Few web.configs dont qualify an embedded ambersand and thus had to be qualified for xml parsing
+		[xml]$file = ([String](Get-Content $webconfigtemppath) -replace 'xmlns="[a-zA-Z0-9:/.]+">', '>' ) -replace '&copy;', '&amp;copy;'
+		$strfile = Get-Content $webconfigtemppath
+		$file.SelectNodes('/configuration/connectionStrings/add') | % {
+			If (($_.getAttribute("name")).StartsWith($script:attributename)) {
+				#Get the current attribute
+				$currentattribute = $_.getAttribute("name")
+				write_log_info 2 "Reading the value of attribute $currentattribute"
+				$oldconnectionstring = $_.getAttribute("connectionString")
+				
+				#Read the conn string
+				$dbstrBuilder = New-Object System.Data.Common.DbConnectionStringBuilder
+				$dbstrBuilder.set_ConnectionString($oldconnectionstring)
+				$userid = $dbstrBuilder["User ID"]
+				$password = $dbstrBuilder["Password"]
+
+				#Construct the new conn string with empty uname/pwd
+				$dbstrBuilder["User ID"] = ""
+				$dbstrBuilder["Password"] = ""
+				$newconnectionstring = $dbstrBuilder.ConnectionString
+
+				#Hash the contents
+				$userid | ConvertTo-SecureString  -AsPlainText -Force | ConvertFrom-SecureString -key $keycontent -OutVariable encrypteduserid | Out-Null
+				$password | ConvertTo-SecureString  -AsPlainText -Force | ConvertFrom-SecureString -key $keycontent -OutVariable encryptedpassword | Out-Null
+
+				#Hashed content, with attribute for hash file
+				[void]$hashoutputArray.Add(@{Attribute = $currentattribute; `
+							UserID                     = $encrypteduserid; `
+							Password                   = $encryptedpassword;
+					})
+						
+				#web.config, with uname/pwd removed
+				$strfile = $strfile.Replace($oldconnectionstring, $newconnectionstring)
+			}
+		}
+
+		#Create the files
+		write_log_info 2 "Creating web.config without DB credentials"
+		$strfile | Set-Content $webconfigpath -force
+		
+		# Create the hash.config file only if there are credentials to be encrypted
+		if ( $hashoutputArray.Count -gt 0 ) {
+			write_log_info 2 "Creating SSO hash file with credentials"
+			$hashoutputArray | ConvertTo-Json | Out-File $webconfighashpath
+		} else {
+			write_log_info 1 "No DB credentials found to encrypt"
+		}
+		
+
+		
+		
+		$xml = New-Object XML
+		$xml.Load("$webconfigpath")
+		$nodes = $xml.configuration.appSettings.add
+		foreach($node in $nodes) {
+			$key = $node.key
+
+			if ($key -eq "PassPhrase") {
+				$node.value | ConvertTo-SecureString  -AsPlainText -Force | ConvertFrom-SecureString -key $keycontent -OutVariable encryptedPassPhrase | Out-Null
+				[void]$ssohashoutputArray.Add('PassPhrase', $encryptedPassPhrase)
+				
+				write_log_info 2 "Removing the value for attribute $key"
+				$node.value = ""
+			}
+		
+			if ($key -eq "AESSalt") {
+				$node.value | ConvertTo-SecureString  -AsPlainText -Force | ConvertFrom-SecureString -key $keycontent -OutVariable encryptedAESSalt | Out-Null
+				[void]$ssohashoutputArray.Add('AESSalt', $encryptedAESSalt)
+				
+				write_log_info 2 "Removing the value for attribute $key"
+				$node.value = ""
+			}
+			
+			if ($key -eq "InitVector") {
+				$node.value | ConvertTo-SecureString  -AsPlainText -Force | ConvertFrom-SecureString -key $keycontent -OutVariable encryptedInitVector | Out-Null
+				[void]$ssohashoutputArray.Add('InitVector', $encryptedInitVector)
+				
+				write_log_info 2 "Removing the value for attribute $key"
+				$node.value = ""
+			}
+		}
+		
+		# Create the sso.hash.config file only if there are credentials to be encrypted
+		if ( $ssohashoutputArray.Count -gt 0 ) {
+			write_log_info 2 "Creating SSO hash file with credentials"
+			$ssohashoutputArray | ConvertTo-Json | Out-File $ssoHashPath
+		} else {
+			write_log_info 1 "No SSO credentials found to encrypt"
+		}
+
+		$xml.Save($webconfigpath)
+	} catch {
+		write_log_message -1 "Encrypt_SecureStrings: Failed to create the web.config under $webconfigpath on $env:computername. Aborting!"
+		write_log_message -1 $_.Exception|format-list -force
+		
+		write_log_info 2 "Cleaning up workpath $workpath from $env:computername"
+		Remove-Item $workpath -recurse -force
+		
+		$script:exitflag = $true
+	}
+}
+
+function Decrypt_SecureStrings() {
+	try {
+		write_log_info 2 "Workpath $fedeploy_workpath"
+		Get-ChildItem -Path $fedeploy_workpath -Filter "*web.config" | % {
+			$currentfile = $_.name
+			write_log_info 2 "Decrypting the config file $currentfile"
+
+			$webconfigpath = Join-Path $fedeploy_workpath $currentfile
+			$webconfighashpath = Join-Path $fedeploy_workpath ($currentfile).ToLower().Replace("web", "cred.hash")
+			$ssoHashPath = Join-Path $fedeploy_workpath ($currentfile).ToLower().Replace("web", "sso.hash")
+			
+			$strfile = Get-Content $webconfigpath
+
+			If (!(Test-Path $webconfighashpath)) {
+				$error_msg = "Hash file {0} corresponding to {1} not found. Aborting..." -f ($currentfile).Replace("web", "cred.hash"), $currentfile
+				write_log_message -1 $error_msg
+				throw $error_msg
+			}
+			#Read web.config - Remove namespace for xml loading (some web.configs have - possibly different - ns, some dont have ns)
+			#Few web.configs dont qualify an embedded ambersand and thus had to be qualified for xml parsing
+			[xml]$file = ([String](Get-Content $webconfigpath) -replace 'xmlns="[a-zA-Z0-9:/.]+">', '>' ) -replace '&copy;', '&amp;copy;'
+			$strfile = Get-Content $webconfigpath
+
+			#Read hash_web.config - read file as a single string
+			$RawString = Get-Content $webconfighashpath | Out-String
+			# Escape sequence for path
+			$StringToConvert = $RawString -replace '\\', '\\'
+			# Convert from Json to custom object
+			$ContentObject = $StringToConvert | ConvertFrom-Json
+
+			$ContentObject | % {
+				$EncryptedContent = $_.UserID | ConvertTo-SecureString -key $keycontent
+				$SecureMemoryPtr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($EncryptedContent)
+				$UserID = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($SecureMemoryPtr)
+				$EncryptedContent = $_.Password | ConvertTo-SecureString -key $keycontent
+				$SecureMemoryPtr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($EncryptedContent)
+				$Password = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($SecureMemoryPtr)
+				$KeyAttribute = $_.Attribute
+
+				$oldconnectionstring = $file.SelectSingleNode('/configuration/connectionStrings/add[@name="' + $KeyAttribute + '"]').getAttribute("connectionString")
+				#Construct the new conn string with unhashed data
+				$dbstrBuilder = New-Object System.Data.Common.DbConnectionStringBuilder
+				$dbstrBuilder.set_ConnectionString($oldconnectionstring)
+				$dbstrBuilder["User ID"] = $UserID
+				$dbstrBuilder["Password"] = $Password
+				$newconnectionstring = $dbstrBuilder.ConnectionString
+				
+				If ($product -eq "GATEWAY") {
+					$oldstring = '<add[ ]+name="{0}"[ ]+connectionString="{1}"[ ]+providerName="System.Data.SqlClient"[ ]*/>' -f $KeyAttribute, $oldconnectionstring
+					$newstring = '<add name="{0}" connectionString="{1}" providerName="System.Data.SqlClient"/>' -f $KeyAttribute, $newconnectionstring
+				}
+				Else {
+					$oldstring = '<add[ ]+name="{0}"[ ]+connectionString="{1}"[ ]*/>' -f $KeyAttribute, $oldconnectionstring
+					$newstring = '<add name="{0}" connectionString="{1}"/>' -f $KeyAttribute, $newconnectionstring
+				}
+
+				If ($strfile -match $oldstring) {
+					$strfile = $strfile -replace $oldstring, $newstring
+					write_log_info 2 "Restored the connection string for attribute $KeyAttribute"
+				}
+				Else {
+					$error_msg = "Cannot find the regex $oldstring in the web.config. Some possible reasons are an incorrect web.config provided to the deploy or a badly formed string in the web.config provided. Aborting SET operation!"
+					write_log_message -1 $error_msg
+					throw $error_msg
+				}
+			}
+			
+			#Create the files
+			write_log_info 2 "Finalizing the web.config with the DB connections"
+			$strfile | Set-Content $webconfigpath -force
+			
+			
+			# Add in the SSO AES Encryption keys
+			
+			If (!(Test-Path $ssoHashPath)) {
+				$script:ssoHashFound = $false
+				$message = "SSO Hash file {0} not found. No SSO AES Encrption keys will be inserted" -f $ssoHashPath
+				write_log_message 1 $message
+			} else {
+				#Read hash_web.config - read file as a single string
+				$ssoRawString = Get-Content $ssoHashPath | Out-String
+				# Escape sequence for path
+				$ssoStringToConvert = $ssoRawString -replace '\\', '\\'
+				# Convert from Json to custom object
+				$ssoContentObject = $ssoStringToConvert | ConvertFrom-Json
+				
+				$ssoContentObject | % {
+					$ssoEncryptedContent = $_.PassPhrase | ConvertTo-SecureString -key $keycontent
+					$ssoSecureMemoryPtr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($ssoEncryptedContent)
+					$PassPhrase = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($ssoSecureMemoryPtr)
+					
+					$ssoEncryptedContent = $_.AESSalt | ConvertTo-SecureString -key $keycontent
+					$ssoSecureMemoryPtr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($ssoEncryptedContent)
+					$AESSalt = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($ssoSecureMemoryPtr)
+					
+					$ssoEncryptedContent = $_.InitVector | ConvertTo-SecureString -key $keycontent
+					$ssoSecureMemoryPtr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($ssoEncryptedContent)
+					$InitVector = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($ssoSecureMemoryPtr)
+				}
+			}
+
+			
+			$ssoKeyFound = $false
+			$xml = New-Object XML
+			$xml.Load("$webconfigpath")
+			$nodes = $xml.configuration.appSettings.add
+			foreach($node in $nodes) {
+				$key = $node.key
+				$value = $node.value
+
+				if ($key -eq "PassPhrase") {
+					if (!$script:ssoHashFound) {
+						$error_msg = "Cannot set the value for attribute {0} because the SSO Hash file was not found " -f $key
+						write_log_info -1 $error_msg
+						throw $error_msg
+					} else {
+						$ssoKeyFound = $true
+						write_log_info 2 "Setting the value for attribute $key"
+						$node.value = "$PassPhrase"
+					}
+				}
+				
+				if ($key -eq "AESSalt") {
+					if (!$script:ssoHashFound) {
+						$error_msg = "Cannot set the value for attribute {0} because the SSO Hash file was not found " -f $key
+						write_log_info -1 $error_msg
+						throw $error_msg
+					} else {
+						$ssoKeyFound = $true
+						write_log_info 2 "Setting the value for attribute $key"
+						$node.value = "$AESSalt"
+					}
+				}
+				
+				if ($key -eq "InitVector") {
+					if (!$script:ssoHashFound) {
+						$error_msg = "Cannot set the value for attribute {0} because the SSO Hash file was not found " -f $key
+						write_log_info -1 $error_msg
+						throw $error_msg
+					} else {
+						$ssoKeyFound = $true
+						write_log_info 2 "Setting the value for attribute $key"
+						$node.value = "$InitVector"
+					}
+				}
+			}
+			
+				
+			if (!$ssoKeyFound) {
+				$message = "Did not find 1 or more SSO AES keys (PassPhrase, AESSalt, InitVector) in the web.config file to be deployed"
+				write_log_message 1 $message
+			} else {
+				$xml.Save($webconfigpath)
+			}			
+			
+		}
+	} catch {
+		write_log_message -1 "Decrypt_SecureStrings: Failed to create the web.config under $webconfigpath on $env:computername. Aborting!"
+		write_log_message -1 $_.Exception|format-list -force
+		
+		write_log_info 2 "Cleaning up workpath $workpath from $env:computername"
+		Remove-Item $workpath -recurse -force
+		
+		$script:exitflag = $true
+	}
+}
+
+function remote_operation () {
+    Try {
+        $serverfqdn = "{0}.{1}.com" -f $servername, $domainname
+        If ($operation -eq "GET") {
+            #Create client and env based work folder and the log location
+            if (!(Test-Path $workpath)) {
+                New-Item $workpath -itemtype directory | Out-Null
+            }
+        }
+		
+        $lockpath = Join-Path $workpath deploy.lock.remote
+        $toolkit_destpath = Join-Path $workpath Deployment
+        $toolkit_destexepath = Join-Path $workpath Deployment.exe
+        
+        #region ########### CHECK AND CLEANUP REMOTE WORKSPACE - PRE ###########
+        # execute the cleanup command
+        # get the session object
+        write_log_info 2 "Starting scriptblock to check and cleanup remote workspace $workpath"
+        $remotesession = .\get_session -domainname $domainname -servername $servername -username $username
+        $returncode = $lastexitcode
+        if ($returncode -eq "-1") {
+            throw "Failed to get session for $servername in domain $domainname"
+        }
+
+        # construct command for cleanup destination before upload
+        $execcommand = {param($lockpath, $workpath, $client_name, $env_type, $version, $noop, $ignore_deploy_lock)
+            If ((Test-Path $lockpath) -and ($ignore_deploy_lock -eq "false")) {
+                Return "-1"
+            }
+            Else {
+                If (Test-Path $workpath) {
+                    Remove-Item $workpath -recurse -force
+                }
+                New-Item $workpath -itemtype directory | Out-Null
+                $content = (Get-Date -Format G) + ": Deploy initiated for $client_name $env_type. Version: $version. noop flag: $noop"
+                Add-Content -Value $content -Path $lockpath
+                Return "0"
+            }
+        }
+        $returncode = Invoke-Command -ScriptBlock $execcommand -Session $remotesession -ArgumentList $lockpath, $workpath, $client, $env_type, $version, $noop, $ignore_deploy_lock
+        #endregion
+
+        if ($returncode -eq "-1") {
+            write_log_message -1 "A DEPLOY IS ALREADY IN PROGRESS IN SERVER: $serverfqdn; LOCATION: $workpath. SKIPPING GW DEPLOY." 
+            $script:exitflag = $true
+        }
+        else {
+            write_log_info 2 "Workspace in remote server $serverfqdn cleaned up and lock file $lockpath created.."
+
+            #region ########### UPLOAD PACKAGES ###########
+            If ($operation -eq "SET") {
+                # Upload the FE_Deploy package
+                .\upload_content_allversion.ps1 -remotesession $remotesession -localpath $fedeploy_exepath -remotepath $fedeploy_exepath
+                $returncode = $lastexitcode
+                if ($returncode -ne "0") {
+                    throw "Failed to upload $fedeploy_srcexepath"
+                }
+            }
+
+            # Upload the Deployment package
+            .\upload_content_allversion.ps1 -remotesession $remotesession -localpath $toolkit_srcexepath -remotepath $toolkit_destexepath
+            $returncode = $lastexitcode
+            if ($returncode -ne "0") {
+                throw "Failed to upload $toolkit_srcexepath"
+            }
+            #endregion
+
+            write_log_info 2 "domainname $domainname servername $servername username $username localpath $workpath remotepath $fedeploy_exepath"
+
+            #region ########### UNPACK PACKAGES ###########
+            If ($operation -eq "SET") {
+                # Unpack the FE_Deploy package
+                .\execute_remote.ps1 -remotesession $remotesession -workpath $workpath -command $fedeploy_exepath
+                $returncode = $lastexitcode
+                if ($returncode -ne "0") {
+                    throw "Failed to unpack $fedeploy_exepath"
+                }
+            }
+            
+            # Unpack the Deployment package
+            .\execute_remote.ps1 -remotesession $remotesession -workpath $workpath -command $toolkit_destexepath
+            $returncode = $lastexitcode
+            if ($returncode -ne "0") {
+                throw "Failed to unpack $toolkit_destexepath"
+            }
+            #endregion
+
+            #region ########### EXECUTE Payload (webconfig get/set) ###########
+            # construct command and arguments (in order). argument seperator is ^
+            $execcommand = ".\webconfig_operation.ps1"
+
+            # base execparams
+            $execparams = "$carrierpath^$carrierbackuppath^$operation^$product^$noop"
+
+            # execute GW deploy in remote server
+            .\execute_remote.ps1 -remotesession $remotesession -workpath $toolkit_destpath -command $execcommand -argumentlist $execparams
+            $returncode = $lastexitcode
+            If ($returncode -ne "0") {
+                $script:exitflag = $true
+            }
+            #endregion
+
+            If ($operation -eq "GET") {
+                If ($noop) {
+                    write_log_info 1 "RUNNING IN NOOP MODE: Would have downloaded the web.config and created hash for connection strings"
+                }
+                Else {
+                    # Download the web.config
+                    $sourcewebconfigpath = Join-Path $workpath web.config
+                    If ($script:multiserverflag) {
+                        $script:webconfigpath = Join-Path $workpath $servername-web.config
+                        $script:webconfigtemppath = Join-path $workpath $servername-web.config.temp
+                        $script:webconfighashpath = Join-path $workpath $servername-cred.hash.config  
+						$script:ssoHashPath = Join-Path $workpath $servername-sso.hash.config
+                    }
+                    Else {
+                        $script:webconfigpath = Join-Path $workpath web.config
+                        $script:webconfigtemppath = Join-path $workpath web.config.temp
+                        $script:webconfighashpath = Join-path $workpath cred.hash.config
+						$script:ssoHashPath = Join-path $workpath sso.hash.config 
+                    }
+                    .\download_content_allversion.ps1 -remotesession $remotesession -remotepath $sourcewebconfigpath -localpath $webconfigtemppath
+
+                    #Encrypt the credentials
+                    Encrypt_SecureStrings
+                }
+            }
+
+            #Upload config to MRA for GET
+            If ($operation -eq "GET") {
+                If ($noop) {
+                    write_log_info 1 "RUNNING IN NOOP MODE: Would have uploaded the web.config to $repo_path"
+                }
+                Else {
+                    Config_Upload
+                }
+            }
+        }
+    }
+    Catch {
+        write_log_message -1 "Fatal Exception during Deploy. Abort. "
+        write_log_message -1 $_.Exception|format-list -force
+        $script:exitflag = $true
+    }
+    Finally {
+        if ($remotesession -ne $null) {
+            try {
+                write_log_info 2 "webconfig_remote_wrap.ps1:  Finally calling Download_log_File"
+                Download_Log_File
+            }
+            Catch {                
+                write_log_message -1 "webconfig_remote_wrap.ps1:  Exception during remote log download."
+                write_log_message -1 $_.Exception|format-list -force
+                write_log_message -1 "webconfig_remote_wrap.ps1:  Continuing resource cleanup..."
+				# $lastexitcode may be set from a child script execution.  Reset it by spawning another shell and exiting 0 immediately.
+                cmd /c "exit 0"
+                write_log_info 1 "webconfig_remote_wrap.ps1:  Reset the LastExitCode. Current value: $lastexitcode"
+                $script:exitflag = $true
+            }
+            
+            try {
+                write_log_info 2 "webconfig_remote_wrap.ps1:  Finally calling Cleanup_Remote_Workspace"
+                Cleanup_Remote_Workspace
+            }
+            Catch {
+                write_log_message -1 "webconfig_remote_wrap.ps1:  Exception during remote workspace cleanup."
+                write_log_message -1 $_.Exception|format-list -force
+                write_log_message -1 "webconfig_remote_wrap.ps1:  Continuing resource cleanup..."
+				# $lastexitcode may be set from a child script execution.  Reset it by spawning another shell and exiting 0 immediately.
+                cmd /c "exit 0"
+                write_log_info 1 "webconfig_remote_wrap.ps1:  Reset the LastExitCode. Current value: $lastexitcode"
+                $script:exitflag = $true
+            }
+            
+            try {
+                write_log_info 2 "webconfig_remote_wrap.ps1:  Finally calling Remove-PSSession $remotesession"
+                Remove-PSSession $remotesession
+            }
+            Catch {
+                write_log_message -1 "webconfig_remote_wrap.ps1:  Exception during PSSession removal."
+                write_log_message -1 $_.Exception|format-list -force
+                write_log_message -1 "webconfig_remote_wrap.ps1:  Continuing resource cleanup..."
+				# $lastexitcode may be set from a child script execution.  Reset it by spawning another shell and exiting 0 immediately.
+                cmd /c "exit 0"
+                write_log_info 1 "webconfig_remote_wrap.ps1:  Reset the LastExitCode. Current value: $lastexitcode"
+                $script:exitflag = $true
+            }
+
+            try {
+                write_log_info 2 "webconfig_remote_wrap.ps1:  Finally calling Log_Upload"
+	            Log_Upload
+            }
+            Catch {
+                write_log_message -1 "webconfig_remote_wrap.ps1:  Exception during log upload to MRA."
+                write_log_message -1 $_.Exception|format-list -force
+				# $lastexitcode may be set from a child script execution.  Reset it by spawning another shell and exiting 0 immediately.
+                cmd /c "exit 0"
+                write_log_info 1 "webconfig_remote_wrap.ps1:  Reset the LastExitCode. Current value: $lastexitcode"
+                $script:exitflag = $true
+            }
+        }
+    }
+}
+
+function Get-ScriptDirectory () {
+    Split-Path $script:MyInvocation.MyCommand.Path
+}
+
+#
+# --------------------------------------------------------
+# Script body
+# --------------------------------------------------------
+#
+$invocationpath = Get-ScriptDirectory
+Push-Location -Path $invocationpath
+. .\logging_helpers.ps1
+
+#
+# --------------------------------------------------------
+# Variables
+# --------------------------------------------------------
+#
+[xml]$CMDBfile = $null
+$scriptspath = Get-ScriptDirectory
+$global:workpath = "C:\RelAuto\WebConfig_$client_name-$env_type\"
+$schemanamespace = "http://schemas.ikasystems.com/webserver/config"
+$servername = ""
+$domainname = ""
+$carrierpath = ""
+$carrierbackuppath = ""
+$toolkit_repo_path = (Get-Item $invocationpath).parent.FullName
+$toolkit_srcpath = Join-Path $toolkit_repo_path Deployment
+$toolkit_srcexepath = Join-Path $toolkit_repo_path Deployment.exe
+$fedeploy_workpath = ""
+$fedeploy_exepath = ""
+$releaselogpath = Join-Path $repo_path "$env_type-Logs\"
+$username = "srv-scmadmin"
+$exitflag = $false
+[bool]$noop = [System.Convert]::ToBoolean($noop)
+$helperpath = Join-Path $scriptspath "Helper\aes256.txt"
+$keycontent = get-content $helperpath
+$multiserverflag = $false
+$webconfigpath = ""
+$webconfigtemppath = ""
+$webconfighashpath = ""
+$attributename = ""
+$hashoutput = @( @{Attribute = ""; `
+            UserID           = ""; `
+            Password         = ""; 
+    })
+[System.Collections.ArrayList]$hashoutputArray = $hashoutput
+$ssohashoutputArray = @{PassPhrase = ""; `
+            AESSalt           = ""; `
+            InitVector         = ""; 
+    }
+
+$operation = $operation.ToUpper().Trim()
+$product = $product.ToUpper().Trim()
+$ssoHashFound = $true
+
+if (!([string]::IsNullOrEmpty($started_by))) { $username = $started_by }
+
+try {
+    If ($operation -eq "SET") {
+        if ([string]::IsNullOrEmpty($client_name) -Or [string]::IsNullOrEmpty($env_type)) {   
+            write_log_message -1 "For web.config $operation operation, client name and environment type parameters are mandatory"
+            Exit -1
+        }
+        #Create client and env based work folder and the log location
+        if (!(Test-Path $workpath)) {
+            New-Item $workpath -itemtype directory | Out-Null
+        }
+    
+        $fedeploy_srcpath = Join-Path $repo_path FE_Deploy
+        write_log_info 2 "Creating workspace $workpath"
+        Copy-Item $fedeploy_srcpath $workpath -Recurse -Force
+        $script:fedeploy_workpath = Join-Path $workpath FE_Deploy
+        $script:fedeploy_exepath = Join-Path $workpath FE_Deploy.exe
+        Decrypt_SecureStrings
+		
+		If (!$script:exitflag) {
+			If (!(Test-Path $fedeploy_exepath)) {
+				# Create build package for FE_Deploy folder
+				.\create_build_pkg.ps1 -build_dir $fedeploy_workpath -pkg_out_dir $workpath -pkg_name FE_Deploy.exe
+			}
+		}
+    }
+    ElseIf ($operation -eq "GET") {
+        #Create base work folder and the log location
+        if (!(Test-Path $workpath)) {
+            New-Item $workpath -itemtype directory | Out-Null
+        }
+    }
+
+	If (!$script:exitflag) {
+		#region ########### BUILD PACKAGES IF NOT PRESENT ###########
+		If (!(Test-Path $toolkit_srcexepath)) {
+			# Create build package for Deployment folder
+			.\create_build_pkg.ps1 -build_dir $toolkit_srcpath -pkg_out_dir $toolkit_repo_path -pkg_name Deployment.exe
+		}
+		#endregion
+
+		read_config_xml
+
+		#Set namespaces
+		$ns = new-object Xml.XmlNamespaceManager $CMDBfile.NameTable
+		$ns.AddNamespace("cfg", $schemanamespace)
+
+		# If both client_name and env_type are passed, extract the client config
+		If (!([string]::IsNullOrEmpty($client_name)) -and !([string]::IsNullOrEmpty($env_type))) {
+			$client_env_node = $CMDBfile.SelectSingleNode('/cfg:Environments/cfg:Client[@Name="' + $client_name.ToUpper() + '" and @Environment="' + $env_type.ToUpper() + '"]', $ns)
+			If ($client_env_node) {
+				$hashoutputArray.Clear()
+				initiate_web $client_env_node
+			}
+			Else {
+				write_log_message -1 "Cannont find the config section for $client_name $env_type. Aborting..."
+				Exit -1
+			}
+		}
+		# GET only - If only env_type is passed, extract the client config for all those env_types
+		ElseIf ($operation -eq "GET" -and (!([string]::IsNullOrEmpty($env_type)))) {
+			If ($CMDBfile.SelectNodes('/cfg:Environments/cfg:Client[@Environment="' + $env_type.ToUpper() + '"]', $ns).Count -gt 0) {
+				#For each client config configured for that environment
+				$CMDBfile.SelectNodes('/cfg:Environments/cfg:Client[@Environment="' + $env_type.ToUpper() + '"]', $ns) | % { 
+					#Reset Vars
+					$client_name = $_.Name 
+					$env_type = $_.Environment
+					$multiserverflag = $false
+					$hashoutputArray.Clear()
+
+					initiate_web $_
+				}
+			}
+			Else {
+				write_log_message -1 "Cannont find the config section for $env_type. Aborting..."
+				Exit -1
+			}
+		}
+		# GET only - If client_name or env_type is not passed, choose all GW client facing environments
+		ElseIf ($operation -eq "GET") {
+			#For each client config
+			$CMDBfile.SelectNodes('/cfg:Environments/cfg:Client', $ns) | % { 
+				#Reset Vars
+				$client_name = $_.Name 
+				$env_type = $_.Environment
+				$multiserverflag = $false
+				$hashoutputArray.Clear()
+
+				initiate_web $_
+			}
+		}
+	}
+
+    # If no errors in functions, exit with success code
+    If (!$script:exitflag) {
+		write_log_info 2 "Cleaning up workpath $workpath from $env:computername"
+		Remove-Item $workpath -recurse -force
+        Exit 0
+    }
+    # If failed in any functions, exit with -1 (failure logged by function itself)
+    Else {
+        throw "Deploy Exception. Check logs."
+        #Exit -1
+    }
+}
+Catch {
+    Exit -1
+}

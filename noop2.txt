@@ -1,0 +1,54 @@
+$PSPolicy = Get-ExecutionPolicy
+$MaxMemoryPerShellMB = Get-ItemPropertyValue -ErrorAction Stop HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WSMAN\Client MaxMemoryPerShellMB
+$MaxEnvelopeSizeKB=Get-ItemPropertyValue -ErrorAction Stop HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WSMAN\Client maxEnvelopeSize
+
+if ($returncode -eq "0") {
+    if ($noop){
+        if ($PSPolicy.ToString() -eq "RemoteSigned") {
+            write_log_info 2 "Success winrm commands"
+            $returncode = $lastexitcode
+             
+            }
+        if ($MaxMemoryPerShellMB -eq 2050){
+            write_log_info 2 "success winrm 1"
+            $returncode = $lastexitcode 
+             
+        }
+        if ($MaxEnvelopeSizeKB -gt 2045){
+            write_log_info 2 "success winrm 2"
+            $returncode = $lastexitcode 
+           
+        }
+ 
+            <# Action when all if and elseif conditions are false #>
+        
+         else {
+            throw "Failed to get session for $servername in domain $domainname"
+            write_log_info 2 "Policy :$PSPolicy expecting value should be RemoteSigned"
+            $returncode = "-1"
+        }}
+        
+     else {
+        
+             $exitflag = $true
+        
+        
+    }}
+ else {
+    $exitflag = $true
+}
+write_log_info 2 "After Success winrm commands, returncode=$returncode, lastexitcode=$lastexitcode, exitflag=$exitflag."
+
+
+
+
+
+
+
+
+
+
+
+~Abxl'?TBb+tO7UN
+MPWWIHA03V.IKAPROD60.COM
+MPWWIHA03V\LA_Cyber_1

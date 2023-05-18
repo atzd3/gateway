@@ -1,0 +1,104 @@
+BCND
+04C
+05C
+06C-   ZTWBCNDAFS06C
+
+BCVT
+01C
+02C
+03C
+
+PREM
+01C
+02C
+03C
+
+IBCX test  done
+
+BCKS test C
+BCKS test G
+BCKS test H
+BCND test C
+BCND test G
+BCND test H
+ Wellmark Test C
+ Wellmark Test g
+ Wellmark Test h
+ vermont Test C
+ vermont Test g
+ vermont Test H
+Premera Test C
+Premera Test G
+Premera Test H   ZTWPREMAFS03C
+
+qh!pZ0}\43T7D_,J
+IPRDWB454.IKAPROD65.com
+IPRDWB454\LA_Cyber_2
+
+
+
+
+SQLSERVER WINRM COMMANDS
+
+ADLDS BACKUP
+
+
+
+C:\Windows\Microsoft.NET\Framework\v4.0.30319
+
+10.120.129.69 productgatewayservice.stage.advantasure.com
+bwXNlo#hs8GVMN57   
+entcorecloud\HRZN_STG_APP
+ENTCORECLOUD\HRZN_STG_APP
+
+
+C:\Windows\Microsoft.NET\Framework\v4.0.30319
+
+\\ZSWHRZNUTL01C\CoreApps\HRZN\STAGE\IDRService\HorizonIDRUpdate.exe
+
+\\ZSWHRZNUTL01C\CoreApps\HRZN\STAGE\IDRService
+
+\\ZSWHRZNUTL01C\CoreApps\HRZN\STAGE\IDRService
+
+
+bwXNlo#hs8GVMN57
+
+
+zUR{BvP4Yk9R+r+u
+
+
+
+(n(E*C0j;zM>4(Pa
+IPRDWB454.ikaprod65.com
+IPRDWB454\LA_Cyber_2
+
+
+if(test-path "artifacts"){
+    Remove-Item artifacts\* -Force
+}
+else{
+    New-Item -path ".\" -name "artifacts" -type directory
+}
+if(test-path "test-reports"){
+    Remove-Item "test-reports\*" -Force
+}
+else{
+    New-Item -path ".\" -name "test-reports" -type directory
+	
+	
+	
+
+}
+
+
+"C:\Program Files\7-Zip\7z.exe" a ${bamboo.build.working.directory}\artifacts\hedisapi.zip "${bamboo.build.working.directory}\hedis.abstraction.api\bin\Release\net6.0\publish\*" -xr!*.pdb -xr!localDB.config
+
+
+
+ikaschedular running as a part of job
+stop
+setup same same way
+validate
+
+
+

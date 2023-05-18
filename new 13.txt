@@ -1,0 +1,26 @@
+The below information needs to be submitted to TBM for financial approval before your IT change is ready for CAB review.  
+
+Add your product, operations and/or architecture partners to this email thread if needed to support your request. 
+Please include your ITSSCM ticket ID # in the subject of this email. 
+
+DESCRIPTION:
+•	Jira ITSSCM ticket ID # [insert ITSSCM ticket here]  https://jiradc.prod.advantasure.com/browse/ITSSCM-4137
+
+1.	Is this a planned or unplanned change? (unplanned, for example would be an urgent support or unexpected technical change; planned for example would be part of a technical roadmap for standing up new product or feature): [planned ,for testing smtp servers to upgrade to new versions and configure in new servers]
+a.	If planned, can you attach the financial forecast data to this email (for example attach the DLE, Strategic Roadmap business case,  Sales Deal approved proforma or TPO Budget Forecast schedule): 
+SFTP Servers Upgrade ( 3 Servers )600Side by Side upgrade, Installation of Global Scape and site migration, Testing and Validation, Needs Windows team and Network team support
+ZUWUSHDFTP01C, ZUWUSHDFTP02C, ZUWUSHDFTP03C
+b.	If unplanned, if not already described in the source ticket please describe urgency and purpose [text here]
+2.	Is this a project expense or an expense that supports existing operations? [expense that supports existing operations after 2 weeks]
+a.	If existing operations, including operational Jira ticket as reference: [[PHSS-29898] New server build with Updated OS for sftp 2 - Advantasure Jira ]
+b.	If planned project, implementation or CR, sales deal, please provide PFB #: [PFB #]
+3.	Is this a 1-time or reoccurring expense? [1-time]
+4.	What is the estimated technical expense? (define cost per month and number of months/years if reoccurring) [for 2 weeks $388.36 total cost]
+5.	What Solution(s) / platform expenses are impacted (? [We are building a new server and decommissioning the old one]
+6.	What Client(s) expenses are impacted? [text here]
+7.	What Vendor(s) will be billing Adv additional expenses due to this change:  [None]
+8.	To what Cost Center ID should the costs be charged? [179720]
+The TBM team will follow up with the submitter of this email to either reply with questions (or) provide emailed approval. 
+
+Once approved it is the Change Owner’s responsibility to ensure a copy of the TBM emailed approval is attached to the ITSSCM ticket. 
+

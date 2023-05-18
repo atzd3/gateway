@@ -1,0 +1,59 @@
+ 
+ create modules which is used to create any number of resources (resource groups, vm's, vmss, subnets, vnets) or to read the exisitng resorces which are classified with different versions.
+
+Set-AzVMExtension -ResourceGroupName "test_POC" -VMName "zdwtestpoc02c" -Name "BGInfo" -Publisher "Microsoft.Compute" -Type "BGInfo" -TypeHandlerVersion 2.2.2
+./terraform import azurerm_resource_group.CLOUD_GOVERNANCE /subscriptions/67d5d336-a1c6-476f-a923-4d667bc71c08/resourceGroups/CLOUD_GOVERNANCE
+
+S3cr3ts2425
+ENTCORECLOUD\Role_DevOps_Admin
+
+add instances variable
+S3cr3ts2425
+S3cr3ts2425
+
+S3cr3ts@242520
+Step1 : Login to Prod DMS server mentioned below and Take backup of PROD Folder mentioned below and keep it in Desktop
+
+ZPWBCKSWE000000.entcorecloud.com
+
+Production Server : \\ZPWBCKSUTL01C.entcorecloud.com\CoreApps\DMSAPI\PROD
+
+
+Step 2:
+
+Deploy DMS API from below Devops pipeline link via Production button (This is DevOPS pipeline deploy the code to \\ZPWBCKSUTL01C.entcorecloud.com\CoreApps\DMSAPI\PROD). Please find devops pipeline deploy page screen shot attached. Approval can be overridden by devops team.
+
+
+https://dev.azure.com/Ikasystems-Pilot/VIS%20API/_release?definitionId=140&view=mine&_a=releases
+
+Step 3:
+
+Replace the web.config file from Desktop backup from step1 to below location
+\\ZPWBCKSUTL01C.entcorecloud.com\CoreApps\DMSAPI\PROD
+
+
+Step 4 : Login to the below servers and reset the DMS API IIS Pool
+
+ZPWBCKSWE000000->10.120.184.69
+
+ZPWBCKSWE000001->10.120.184.70
+
+ZPWBCKSWE000002->10.120.184.71 ( if the server available )
+Rollback Plan:
+
+Login into Below Production DMS server. Restore production folder from back up from step1 in Rollout plan to below server path and below path.
+
+ZPWBCKSWE000000.entcorecloud.com
+
+\\ZPWBCKSUTL01C.entcorecloud.com\CoreApps\DMSAPI\PROD
+
+
+
+Step 2: Login to the below servers and reset DMS API IIS Pool
+
+ZPWBCKSWE000000->10.120.184.69
+
+ZPWBCKSWE000001->10.120.184.70
+
+ZPWBCKSWE000002->10.120.184.71 ( if the server available )
+az vm extension image list --location eastus2 --publisher Microsoft.Microsoft.Compute --name CustomScriptExtension

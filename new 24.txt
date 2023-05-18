@@ -1,0 +1,68 @@
+write_log_info 2 "WINRM validation started"
+$PSPolicy = Get-ExecutionPolicy
+$MaxMemoryPerShellMB = Get-ItemPropertyValue -ErrorAction Stop HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WSMAN\Client MaxMemoryPerShellMB
+$MaxEnvelopeSizeKB=Get-ItemPropertyValue -ErrorAction Stop HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WSMAN\Client maxEnvelopeSize
+
+if ($returncode -eq "0") {
+    if ($noop){
+        if (-not ($DBDeployMethod -eq "REDGATE")) {
+         
+            
+        if (($PSPolicy.ToString() -eq "RemoteSigned")  -and ($MaxMemoryPerShellMB -ge 2048)  -and ($MaxEnvelopeSizeKB -ge 2048)) {
+            write_log_info 2 "Powershellremoting WINRM Success PS policy, MaxMemorypershellMB and MaxEnvelopeSizeKB"
+            $returncode = $lastexitcode
+        } else {
+           write_log_info -1 "Powershell remoting WINRM validation FAILURE due to the reasons below"
+           if(-not ($PSPolicy.ToString() -eq "RemoteSigned")){
+                write_log_info -1 "Powershell WINRM policy is not RemoteSigned and currently it is set to $PSPolicy"
+
+            }
+            if(-not ($MaxMemoryPerShellMB -ge 2048)){
+                write_log_info -1 "Powershell WINRM policy does not meet the MaxMemoryPerShell configuration and currently it is set to $MaxMemoryPerShellMB"
+
+            }
+            if(-not ($MaxEnvelopeSizeKB -ge 2048)){
+                write_log_info -1 "Powershell WINRM policy does not meet the MaxEnvelopeSize configuration and currently it is set to $MaxEnvelopeSizeKB"
+
+            }
+          
+            write_log_info -1 "Powershell remote validation END"
+            throw "WINRM validation failed"
+            $returncode = "-1"
+        }}
+        else {
+        
+            $exitflag = $true
+
+        
+    }} else {
+        
+             $exitflag = $true
+        
+        
+    }
+} else {
+    $exitflag = $true
+}
+
+
+
+
+ZTWWAHPWEB01C,ZTWWAHPWEB02C
+ZTWWAHPWEB01C,ZTWWAHPWEB02C
+ZTWWAHPWEB01C,ZTWWAHPWEB02C
+ZSWWAHPWEB01C,ZSWWAHPWEB02C
+
+
+
+integration_biz_claimsinbound_1_0_0_20230308
+Integration.BIZ.ClaimsInbound-1.0.0_20230308.msi
+Integration.BIZ.ClaimsInbound-1.0.0_20230308.msi
+
+integration_biz_nonedi_nachaenrollment_appin_1_0_0_20230511
+\\Ztwshrdbzf02c\BTSDeploy\MSI\DevOps\Integration.BIZ.NonEDI.NACHAEnrollment.APPIN\Integration.BIZ.NonEDI.NACHAEnrollment.APPIN-1.0.0_20230511.msi
+
+
+
+
+

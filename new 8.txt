@@ -1,0 +1,619 @@
+# --------------------------------------------------------
+# Script: deploy_gw_remote_wrap.ps1
+# Developer: gselvan
+# Date: 08/04/16
+# Comments: enables the entire gw to be deployed via remoting
+# --------------------------------------------------------
+
+#
+# --------------------------------------------------------
+# Includes and params()
+# --------------------------------------------------------
+#
+
+param([string]$client_name = "", [string]$env_type = "", [string]$started_by = "", [string]$version = "", [string]$client_script_folder = "",`
+      [string]$description = "Gateway Release on " + (Get-Date -Format MMddyyyy), [string]$build_repo_path = "", [string]$noop = "false",`
+      [string]$force = "false", [string]$ignore_deploy_lock = "false")
+	  
+
+  
+#
+# --------------------------------------------------------
+# Functions
+# --------------------------------------------------------
+#
+
+function read_config_xml ()
+{
+    If(Test-Path Visiant_Product_Environments.xml) {
+        Try {
+            #Get XML Content
+            $configxmlfile = Join-Path $invocationpath Visiant_Product_Environments.xml
+
+            #Read the file once and store the content in common variable
+            $script:file = Get-Content $configxmlfile
+        }
+        Catch {
+            write_log_message -1 "read_config_xml: Failed to read the config XML file. Abort. " + $_
+            write_log_message -1 $_.Exception|format-list -force
+            $script:exitflag = $true
+        }
+    }
+    Else {
+        write_log_message -1 "Config file Visiant_Product_Environments.xml not found. Abort."
+        $script:exitflag = $true
+    }
+}
+
+function check_security_access ()
+{
+    Try {
+        #Set namespaces
+        $ns = new-object Xml.XmlNamespaceManager $file.NameTable
+        $ns.AddNamespace("cfg", $schemanamespace)
+
+        #Read the allowed groups for the environment type
+        $allowed_group = $file.SelectSingleNode('/cfg:Environments/cfg:Security/cfg:Allow[@Environment="' + $env_type.ToUpper() + '"]', $ns).GetAttribute("Group")
+
+        #Abort if not group is configured for an environment type
+        If([string]::IsNullOrEmpty($allowed_group)) {
+            write_log_message -1 "Security Exception. Allowed 'Group' attribute not set for environment $env_type. Abort."
+            $script:exitflag = $true
+        }
+        Else {
+			$NoGroupFound = $true
+			$NoAccess = $true
+		
+            #Check if the group exists in this domain
+			$groupArray = $allowed_group.split(",")
+			foreach ($group in $groupArray) {
+				$GroupExists = Get-ADGroup -LDAPFilter "(SAMAccountName=$group)"
+				
+				# heck if the user who kicked off the build is a member of the group. Proceed/abort accordingly
+				if ($GroupExists) {
+					$NoGroupFound = $false
+					$members += Get-ADGroupMember -Identity $group -Recursive | Select -ExpandProperty SamAccountName
+					
+					If ($members -contains $started_by) {
+						$NoAccess = $false
+						write_log_info 2 "User $started_by is part of group $group that is permitted to deploy to $env_type environments. Proceeding with deploy..."
+						break
+					}
+				} else {
+					write_log_info 2 "Group $group not found in this domain"
+				}
+            }
+			
+			if ($NoGroupFound -eq $true) {
+				write_log_message -1 "Security Exception. None of the groups specified in the CMDB exist in this domain. Aborting ..."
+				$script:exitflag = $true
+			} elseif ($NoAccess -eq $true) {
+				write_log_message -1 "User $started_by is NOT part of any of the groups $allowed_group that are permitted to deploy to $env_type environments. Aborting..."
+				$script:exitflag = $true
+			}
+            
+        }
+    }
+    Catch
+    {
+        write_log_message -1 "check_security_access: Failed to read the config XML file. Abort. " + $_
+        write_log_message -1 $_.Exception|format-list -force
+        $script:exitflag = $true
+    }
+}
+function Download_Log_File() {
+    # Download the log file
+    $logfilepath = Join-Path $workpath ("Log_" + (Get-Date -Format MMddyyyy) + ".txt")
+
+    $execcommand = {param($logfilepath)
+                        Return [IO.File]::ReadAllText($logfilepath)
+                    }
+    $returncode = Invoke-Command -ScriptBlock $execcommand -Session $remotesession -ArgumentList $logfilepath
+    write_log_info 2 $returncode -silent
+}
+
+function Cleanup_Remote_Workspace() {
+    #region ########### STEP 7: CLEANUP REMOTE WORKSPACE - POST ###########
+    # execute the cleanup command
+    write_log_info 2 "Starting scriptblock to check and cleanup remote workspace $workpath in $serverfqdn"
+                    
+    # construct command for cleanup destination after all operations
+    $execcommand = {param($workpath)
+                        cd \;
+						$cleanup_attempt_limit = 10
+						if (Test-Path $workpath) {
+							for($i=1; $i -le $cleanup_attempt_limit; $i++) {
+							Remove-Item $workpath -recurse -force -ErrorAction SilentlyContinue
+								if ($?) { return "Cleanup complete" }
+								elseif ($i -lt $cleanup_attempt_limit) { Start-Sleep -Seconds 2 }
+								else { return "Cleanup failed" }
+							}
+						}
+						else { return "Cleanup complete" }
+                    }
+    $returncode = Invoke-Command -ScriptBlock $execcommand -Session $remotesession -ArgumentList $workpath
+
+    write_log_info 2 "Return from command: $returncode"
+    #endregion
+}
+
+function Log_Upload() {
+    write_log_info 2 "Logs copied to $releaselogpath"
+    #Rename and Copy the final log path
+    $logfilepath = Join-Path $workpath ("Log_" + (Get-Date -Format MMddyyyy) + ".txt")
+    Rename-Item $logfilepath ("$client_name-$env_type-Log_" + (Get-Date -Format MMddyyyy_mmss) + ".txt")
+    $templogfilepath = Join-Path $workpath ("$client_name-$env_type-Log_" + (Get-Date -Format MMddyyyy_mmss) + ".txt")
+    Copy-Item $templogfilepath $releaselogpath
+}
+
+function remote_deploy ()
+{
+    Try
+    {
+		#Declare hash array used to record DB environments deployed to for avoiding unnecessary duplicate deploys.
+        $alreadyDeployedDBTo = @{}
+		
+        #Set namespaces
+        $ns = new-object Xml.XmlNamespaceManager $file.NameTable
+        $ns.AddNamespace("cfg", $schemanamespace)
+
+        #Get the server config
+        $servercount = $file.SelectNodes('/cfg:Environments/cfg:Client[@Name="' + $client_name.ToUpper() + '" and @Environment="' + $env_type.ToUpper() + '"]/cfg:Gateway', $ns).Count
+        write_log_info 2 "Number of target servers configured for  $client_name $env_type environment: $servercount"
+		
+		if ($servercount -eq 0) {
+			$script:exitflag = $true
+		}
+
+        $file.SelectNodes('/cfg:Environments/cfg:Client[@Name="' + $script:client_name.ToUpper() + '" and @Environment="' + $script:env_type.ToUpper() + '"]/cfg:Gateway', $ns) | % { 
+            $script:servername        = $_.Server 
+            $script:sitename          = $_.Site
+
+            write_log_info 2 "Retrieving config Params section for server: $script:servername $script:sitename"
+
+            $script:domainname        = $_.SelectSingleNode('cfg:DomainName', $ns).innerxml
+			$script:username          = $_.SelectSingleNode('cfg:UserName', $ns).innerxml
+            $script:datasource        = $_.SelectSingleNode('cfg:DBServer', $ns).innerxml
+            $serverfqdn = $servername + "." + $domainname + ".com"
+			
+			#determine whether or not to deploy DB
+            $deployDB = (-Not ($alreadyDeployedDBTo.ContainsKey($script:datasource)))
+            if ($deployDB) {
+                write_log_info 2 "Deploy has not happened yet for data source:  $script:datasource.  Will perform DB Deploy if artifact is available."
+            }
+            Else {
+                write_log_info 2 "Deploy has already happened for data source:  $script:datasource.  Will NOT perform DB Deploy even if artifact is available."
+            }
+			
+			If ([string]::IsNullOrEmpty($script:username)) {
+				$message = "Username is missing from the CMDB."
+                write_log_message -1 $message
+				throw $message
+            }
+
+            #region ########### STEP 1: BUILD PACKAGES IF NOT PRESENT ###########
+            If(!(Test-Path $fedeploy_srcexepath)) {
+                # Create build package for FE_Deploy folder
+                .\create_build_pkg.ps1 -build_dir $fedeploy_srcpath -pkg_out_dir $releasepath -pkg_name FE_Deploy.exe -log_file $global:logfile
+            }
+
+             If($deployDB -and !(Test-Path $dbdeploy_srcexepath)) {
+                # Create build package for DB_Deploy folder
+                .\create_build_pkg.ps1 -build_dir $dbdeploy_srcpath -pkg_out_dir $releasepath -pkg_name DB_Deploy.exe -log_file $global:logfile
+            }
+
+            If(!(Test-Path $toolkit_srcexepath)) {
+                # Create build package for Deployment folder
+                .\create_build_pkg.ps1 -build_dir $toolkit_srcpath -pkg_out_dir $toolkit_repo_path -pkg_name Deployment.exe -log_file $global:logfile
+            }
+            #endregion
+
+            #region ########### STEP 2: CHECK AND CLEANUP REMOTE WORKSPACE - PRE ###########
+            # execute the cleanup command
+            # get the session object
+            write_log_info 2 "Starting scriptblock to check and cleanup remote workspace $workpath"
+            $remotesession = .\get_session -domainname $domainname -servername $servername -username $username
+			if (!$remotesession) {
+                throw "Failed to get session for $servername in domain $domainname"
+            } else {
+				# construct command for cleanup destination before upload
+				# Post PS2, 'using' variable can be made use of. That should work with higher PS. But didn't work when remoting from PS4 to PS5 - failed with below err.
+				# +++A Using variable cannot be retrieved. A Using variable can be used only with Invoke-Command, Start-Job, or InlineScript in the script workflow. 
+				# +++When it is used with Invoke-Command, the Using variable is valid only if the script block is invoked on a remote computer.
+				# So had to use param/argumentlist for all PS Versions
+
+				$execcommand = {param($lockpath, $workpath, $client_name, $env_type, $version, $noop, $ignore_deploy_lock)
+									If ((Test-Path $lockpath) -and ($ignore_deploy_lock -eq "false"))
+									{
+										Return "-1"
+									}
+									Else 
+									{
+										If (Test-Path $workpath)
+										{
+											Remove-Item $workpath -recurse -force
+										}
+										New-Item $workpath -itemtype directory | Out-Null
+										$content = (Get-Date -Format G) + ": Deploy initiated for $client_name $env_type. Version: $version. noop flag: $noop"
+										Add-Content -Value $content -Path $lockpath
+										Return "0"
+									}
+								}
+
+				$returncode = Invoke-Command -ScriptBlock $execcommand -Session $remotesession -ArgumentList $lockpath, $workpath, $client_name, $env_type, $version, $noop, $ignore_deploy_lock
+
+				#endregion
+
+
+				if ($returncode -eq "-1")
+				{
+					write_log_message -1 "A DEPLOY IS ALREADY IN PROGRESS IN SERVER: $serverfqdn; LOCATION: $workpath. SKIPPING GW DEPLOY." 
+					$script:exitflag = $true
+				}
+				else
+				{
+					write_log_info 2 "Workspace in remote server $serverfqdn cleaned up and lock file $lockpath created.."
+
+					#region ########### STEP 3: UPLOAD PACKAGES ###########
+					# Upload the FE_Deploy package
+					.\upload_content_allversion.ps1 -remotesession $remotesession -localpath $fedeploy_srcexepath -remotepath $fedeploy_destexepath -log_file $global:logfile
+					$returncode = $lastexitcode
+					if ($returncode -ne "0") {
+						throw "Failed to upload $fedeploy_srcexepath"
+					}
+					# Upload the DB_Deploy package
+					if ($deployDB) {
+						.\upload_content_allversion.ps1 -remotesession $remotesession -localpath $dbdeploy_srcexepath -remotepath $dbdeploy_destexepath -log_file $global:logfile
+						$returncode = $lastexitcode
+						if ($returncode -ne "0") {
+							throw "Failed to upload $dbdeploy_srcexepath"
+						}
+					}
+					# Upload the Deployment package
+					.\upload_content_allversion.ps1 -remotesession $remotesession -localpath $toolkit_srcexepath -remotepath $toolkit_destexepath -log_file $global:logfile
+					$returncode = $lastexitcode
+					if ($returncode -ne "0") {
+						throw "Failed to upload $toolkit_srcexepath"
+					}
+					#endregion
+
+					write_log_info 2 "domainname $domainname servername $servername username $username localpath $workpath remotepath $fedeploy_destexepath"
+
+					#region ########### STEP 4: UNPACK PACKAGES ###########
+					# Unpack the FE_Deploy package
+					.\execute_remote.ps1 -remotesession $remotesession -workpath $workpath -command $fedeploy_destexepath -log_file $global:logfile
+					$returncode = $lastexitcode
+					if ($returncode -ne "0") {
+						throw "Failed to unpack $fedeploy_destexepath"
+					}
+
+					# Unpack the Deployment package
+					.\execute_remote.ps1 -remotesession $remotesession -workpath $workpath -command $toolkit_destexepath -log_file $global:logfile
+					$returncode = $lastexitcode
+					if ($returncode -ne "0") {
+						throw "Failed to unpack $toolkit_destexepath"
+					}
+
+					# Unpack the DB_Deploy package
+					if ($deployDB -and ($servername.ToUpper() -eq $datasource.ToUpper())) {
+						.\execute_remote.ps1 -remotesession $remotesession -workpath $workpath -command $dbdeploy_destexepath -log_file $global:logfile
+						$returncode = $lastexitcode
+						if ($returncode -ne "0") {
+							throw "Failed to unpack $dbdeploy_destexepath"
+						}
+
+					}
+					#endregion
+
+					#region ########### STEP 5: EXECUTE GW DEPLOY ###########
+					# construct command and arguments (in order). argument seperator is ^
+					$execcommand = ".\deploy_gateway.ps1"
+
+					# base execparams
+					[string]$deployDBString = "true"
+                    if (-Not ($deployDB)) {
+                        $deployDBString = "false"
+                    }
+					$execparams  = "$client_name^$env_type^$version^$client_script_folder^$sitename^$description^$noop^$force^$ignore_deploy_lock^$deployDBString^$global:logfile"
+
+
+					# execute GW deploy in remote server
+					.\execute_remote.ps1 -remotesession $remotesession -workpath $toolkit_destpath -command $execcommand -argumentlist $execparams
+					$returncode = $lastexitcode
+					if ($deployDB) {
+                        $alreadyDeployedDBTo.Add($script:datasource, $true)
+                    }
+					#endregion
+
+					#region ########### STEP 6: DOWNLOAD LOG PACKAGE AND FILE ###########
+					if ($deployDB) {
+						if ($returncode -eq "0") {
+							<#
+							# Download the DB_Deploy Logs package (upload via nested remoting)
+							$execcommand = ".\upload_content_allversion.ps1"
+							$dbdeploylogexepath = Join-Path $workpath $client_name-$env_type-DB_Deploy_Logs.exe
+							# The $env:userdnsdomain returns NULL unless a user is logged in
+							$hostdomain = [System.Net.Dns]::GetHostEntry([string]$env:computername).HostName.split('.')[1]
+							$execparams  = "$hostdomain^$env:COMPUTERNAME^$username^$dbdeploylogexepath^$dbdeploylogexepath"
+
+							# execute log packaging in remote server
+							.\execute_remote.ps1 -remotesession $remotesession -workpath $toolkit_destpath -command $execcommand -argumentlist $execparams
+							#>
+
+							# Download the DB_Deploy Logs package
+							$dbdeploylogexepath = Join-Path $workpath $client_name-$env_type-DB_Deploy_Logs.exe
+							.\download_content_allversion.ps1 -remotesession $remotesession -remotepath $dbdeploylogexepath -localpath $dbdeploylogexepath -log_file $global:logfile
+
+							$checklogexepath = Join-Path $releaselogpath $client_name-$env_type-DB_Deploy_Logs.exe
+							If (Test-Path $checklogexepath) {
+								$currtime = (Get-Date -Format HHmmss)
+								Rename-Item $dbdeploylogexepath  $client_name-$env_type-DB_Deploy_Logs-$currtime.exe
+								$dbdeploylogexepath = Join-Path $workpath $client_name-$env_type-DB_Deploy_Logs-$currtime.exe
+								#region ########### STEP 10: Rename the folder in 7z archive (to ease unzip when all 7z exes are placed in same drive) ###########
+								write_log_info 2 "Renaming the zip folder $client_name-$env_type-DB_Deploy_Logs-$currtime"
+								$systemtype = ""
+								# Determine the type of exe to use
+								if ([System.IntPtr]::Size -eq 4) {
+									$systemtype = "32bit"
+								}
+								else {
+								$systemtype = "64bit"
+								}
+
+								$zip_exe = Join-Path $invocationpath "$systemtype\7z.exe"
+								$operation = 'rn'
+								$output = & $zip_exe $operation $dbdeploylogexepath $client_name-$env_type-DB_Deploy_Logs $client_name-$env_type-DB_Deploy_Logs-$currtime
+								write_log_info 2 $output
+								#endregion
+							}
+
+							Copy-Item $dbdeploylogexepath $releaselogpath
+
+							# If the environment is clientfacing, expand the logs
+							if ($clientfacing -contains $env_type.ToUpper()) {
+								& $dbdeploylogexepath -o"$releaselogpath" -y
+							}
+						}
+						else {
+							$script:exitflag = $true
+						}
+					}
+					#endregion
+
+					#Download log
+					Download_Log_File
+
+					#Cleanup remote 
+					Cleanup_Remote_Workspace
+
+					#Upload log to MRA
+					Log_Upload
+
+					#remove/dispose session
+					Remove-PSSession $remotesession
+				}
+            }
+        }
+        #cleanup temp work path
+        Remove-Item $workpath -recurse -force
+
+    }
+    Catch
+    {
+        write_log_message -1 "Fatal Exception during Deploy. Abort. "
+        write_log_message -1 $_.Exception|format-list -force
+        try {
+            if ($remotesession -ne $null) {
+                #Download log
+                Download_Log_File
+
+                #Cleanup remote 
+                Cleanup_Remote_Workspace
+
+                #Upload log to MRA
+                Log_Upload
+
+                Remove-PSSession $remotesession
+            }
+
+            if (Test-Path $workpath) {
+                Remove-Item $workpath -recurse -force
+            }
+        }
+        catch {
+        }
+        $script:exitflag = $true
+        throw $_.Exception|format-list -force
+    }
+}
+
+function Get-ScriptDirectory () {
+    Split-Path $script:MyInvocation.MyCommand.Path
+}
+
+
+function Validate-Manifest () {
+	if (Test-Path $manifest_srcpath) {
+		write_log_info 2 "Manifest.xml found, validating deploy contents"
+		try {
+			$manifest = [xml](Get-Content $manifest_srcpath)
+			
+			$manApplication = $manifest.Manifest.Application
+			$manModule      = $manifest.Manifest.Module
+			$manType        = $manifest.Manifest.Type
+			
+			# The deploy is requesting a datafix, make sure that's what is in the manifest
+			if ($version.ToUpper().Trim() -eq "DATAFIX") {
+				if ($manifest.Manifest.Type -eq "DATAFIX") {
+					# The standard case
+					if ( ($manApplication -eq "ENROLLMENT") -and ($manModule -eq "ENROLLMENT") )
+					{
+						write_log_info 2 "Manifest validation successful for ENROLLMENT DATAFIX."
+					}
+					else {
+						throw "Jenkins deploy configured for ENROLLMENT DATAFIX but MRA manifest is for $manApplication $manType"
+					}
+				}
+				else {
+					throw "Jenkins deploy configured for DATAFIX but MRA manifest is for $manType"
+				}
+			}
+			elseif (($version.Trim().ToUpper() -eq "WEB.CONFIG") -or ($version.Trim().ToUpper() -eq "WEBCONFIG")) {
+				if ($manType -eq "WEBCONFIG") {
+					# The standard case
+					if ( ($manApplication -eq "ENROLLMENT") -and ($manModule -eq "ENROLLMENT") )
+					{
+						write_log_info 2 "Manifest validation successful for ENROLLMENT WEBCONFIG."
+					}
+					else {
+						throw "Jenkins deploy configured for ENROLLMENT WEBCONFIG but MRA manifest is for $manApplication $manType"
+					}
+				}
+				else {
+					throw "Jenkins deploy configured for WEBCONFIG but MRA manifest is for $manType"
+				}
+			}
+			else {
+				# standard application deploy
+				if ($manType -eq "APPLICATION") {
+					if ( ($manApplication -eq "ENROLLMENT") -and ($manModule -eq "ENROLLMENT") )
+					{
+						write_log_info 2 "Manifest validation successful for ENROLLMENT APPLICATION."
+					}
+					else {
+						throw "Jenkins deploy is configured for ENROLLMENT but MRA manifest is for $manApplication $manModule"
+					}
+				}
+				else {
+					throw "Unknown application type $manType"
+				}
+			}
+		}
+		catch {
+			write_log_message -1 "Manifest.xml validation failed! $_"
+            $script:exitflag = $true
+		}
+	}
+	else {
+		write_log_info 2 "Manifest.xml not found, skipping deploy contents validation"
+	}
+}
+
+#
+# --------------------------------------------------------
+# Script body
+# --------------------------------------------------------
+#
+$invocationpath = Get-ScriptDirectory
+Push-Location -Path $invocationpath
+. .\logging_helpers.ps1
+
+
+# Remove any trailing space
+$version = $version.trim()
+$build_repo_path = $build_repo_path.trim()
+
+if ([string]::IsNullOrEmpty($client_name) -Or [string]::IsNullOrEmpty($env_type) -Or [string]::IsNullOrEmpty($version) -Or [string]::IsNullOrEmpty($build_repo_path))
+{   
+    write_log_message -1 "Oops! Fewer parameters than expected were passed! Usage: .\deploy_gw_remote_wrap.ps1 -client_name ""CLIENT"" -env_type ""QA"" -version ""a.b.c.d""" +`
+                         "-client_script_folder ""CLIENT_FLDR"" -description ""Optional desc about release"" -build_repo_path ""\\ikavsadam226\Change\Rel\GATEWAY\MONTHLY"""
+    throw "Deploy Exception. Check logs." #Exit -1
+}
+
+#
+# --------------------------------------------------------
+# Variables
+# --------------------------------------------------------
+#
+#region VARIABLE INITIALIZE
+[xml]$file             = $null
+$domainname            = ""
+$username              = ""
+$servername            = ""
+$sitename              = ""
+$datasource            = ""
+$exitflag              = $false
+$notDeployedToDB	   = $true
+$returncode            = 0 
+$schemanamespace       = "http://schemas.ikasystems.com/webserver/config"
+
+
+If (($version.Trim().ToUpper() -eq "WEB.CONFIG") -or ($version.Trim().ToUpper() -eq "WEBCONFIG")) {
+	$global:workpath = "C:\RelAuto\WebConfig_$client_name-$env_type\"
+} else {
+	$global:workpath       = "C:\RelAuto_$client_name-$env_type\"
+}
+$lockpath              = Join-Path $workpath deploy.lock.remote
+$releasepath           = $build_repo_path #Join-Path $build_repo_path $version # to suffix versions
+$releaselogpath        = Join-Path $releasepath "$env_type-Logs\"
+$toolkit_repo_path     = (get-item $invocationpath).parent.FullName
+$toolkit_srcpath       = Join-Path $toolkit_repo_path Deployment
+$toolkit_srcexepath    = Join-Path $toolkit_repo_path Deployment.exe
+$toolkit_destpath      = Join-Path $workpath Deployment
+$toolkit_destexepath   = Join-Path $workpath Deployment.exe
+$fedeploy_srcpath      = Join-Path $releasepath FE_Deploy
+$fedeploy_srcexepath   = Join-Path $releasepath FE_Deploy.exe
+$fedeploy_destpath     = Join-Path $workpath FE_Deploy
+$fedeploy_destexepath  = Join-Path $workpath FE_Deploy.exe
+$dbdeploy_srcpath      = Join-Path $releasepath DB_Deploy
+$dbdeploy_srcexepath   = Join-Path $releasepath DB_Deploy.exe
+$dbdeploy_destpath     = Join-Path $workpath DB_Deploy
+$dbdeploy_destexepath  = Join-Path $workpath DB_Deploy.exe
+$manifest_srcpath	   = Join-Path $releasepath Manifest.xml
+#endregion
+
+
+#Create base work folder and the log location
+if (!(Test-Path $workpath)) {
+	New-Item $workpath -itemtype directory | Out-Null
+}
+if (!(Test-Path $releaselogpath)) {
+	New-Item $releaselogpath -itemtype directory | Out-Null
+}
+
+#Set client facing environments
+$clientfacing = 'PROD', 'SIT', 'UAT', 'TEST', 'STAGE', 'STAGING', 'TRAIN', 'TRAINING', 'REGIONC', 'REGIOND', 'REGIONG', 'REGIONH', 'CAP'
+
+#Validate if the passed environment is part of the client facing list. If so, started_by is needed (should not be scheduled).
+if (($clientfacing -contains $env_type.ToUpper()) -and [string]::IsNullOrEmpty($started_by)) {
+    write_log_message -1 "Deploys to environment: $env_type needs to be user initiated. started_by is empty ($started_by). Abort."
+    throw "Deploy Exception. Check logs." #Exit -1
+}
+
+#Generic function to read configs
+read_config_xml
+
+#If started_by is present, validate the security access
+If (!$exitflag) {
+    if (!([string]::IsNullOrEmpty($started_by))) {
+        check_security_access
+    }
+}
+
+# Validate the MRA matches the deploy config
+Validate-Manifest
+
+write_log_info 2 "The ignore_deploy_lock flag has been set to $ignore_deploy_lock"
+
+If (!$exitflag) {
+    If (($version.Trim().ToUpper() -eq "WEB.CONFIG") -or ($version.Trim().ToUpper() -eq "WEBCONFIG")) {
+        .\webconfig_remote_wrap.ps1 -product "Gateway" -operation "SET" -env_type $env_type -client_name $client_name -repo_path $build_repo_path -noop $noop -ignore_deploy_lock $ignore_deploy_lock `
+             -log_file $global:logfile
+        if ($LASTEXITCODE -ne 0) {
+            $exitflag = $true
+        }
+    }
+    Else {
+        #Invoke the function that has all the steps for a remote deploy
+        remote_deploy
+    }
+}
+
+# If no errors in functions, exit with success code
+If (!$script:exitflag) {
+    Exit 0
+}
+# If failed in any functions, exit with -1 (failure logged by function itself)
+Else {
+    throw "Deploy Exception. Check logs." #Exit -1
+}

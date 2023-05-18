@@ -1,0 +1,48 @@
+<membership defaultProvider="TouchStoneAdamProvider">
+      <providers>
+        <add name="TouchStoneAdamProvider"
+        type="System.Web.Security.ActiveDirectoryMembershipProvider, System.Web, Version=2.0.0.0, Culture=neutral,PublicKeyToken=b03f5f7f11d50a3a"
+        connectionStringName="TouchStone" connectionUsername="CN=AdminUser,OU=IndependentAdmin,O=independent,DC=ikaclaims45,DC=com"
+        connectionPassword="Password$1" connectionProtection="None" enableSearchMethods="true" requiresUniqueEmail="false"
+        enablePasswordReset="true" requiresQuestionAndAnswer="true" attributeMapPasswordQuestion="passwordQuestion"
+        attributeMapPasswordAnswer="passwordAnswer" attributeMapFailedPasswordAnswerCount="badPasswordAnswerCount"
+        attributeMapFailedPasswordAnswerTime="badPasswordAnswerTime" attributeMapFailedPasswordAnswerLockoutTime="badPasswordAnswerLockoutTime"
+        passwordStrengthRegularExpression="(?=.{7,})(?=.*\d)(?=.*[a-z])(?=.*[A-Z])(?=.*[@`~$%^+=!*])"/>
+      </providers>
+    </membership>
+	
+	
+	
+	 </configSections>
+  <appSettings>
+    <!--Report server details -->
+    <add key="ReportServerUrl" value="http://ikatest238/reportserver" />
+    <add key="ReportServerUsername" value="cgodinez" /> <!--your ikaSystems username: cgodinez -->
+    <add key="ReportServerUsernamePassword" value="XXX" /> <!--your ikaSystems password -->
+    <add key="ReportServerUsernameDomain" value="IKASYSTEMS" />
+    <add key="WebHostCount" value="1" />
+    <!--interQual and milliman settings-->
+    <add key="RMurl" value="https://cerme.ikatest.com/CERM/claims-cerme.htm?authNo="/>
+    <add key="RMorMM" value="I"/>
+    <add key="DOCCOMMISSION" value="/UserDocuments/Commissions/"/>
+    <!--S: Adam -->
+    <add key="connectionUsername" value="CN=AdminUser,OU=IndependentAdmin,O=independent,DC=ikaclaims45,DC=com"/>
+    <add key="connectionPassword" value="Password$1"/>
+    <add key="connectionServer" value="10.120.204.12"/>
+    <add key="connectionPortNumber" value="50210"/>
+    <add key="connectionRoot" value="O=independent,DC=ikaclaims45,DC=com"/>
+    <add key="connectionRootMerged" value="OU=IndependentUsers,O=independent,DC=ikaclaims45,DC=COM"/>
+    <add key="connectionUsersContainer" value="IndependentUsers"/>
+    <add key="defaultRoles" value="Readers"/>
+    <add key="connectionRolesContainer" value="Roles"/>
+    <add key="connectionAdminsContainer" value="Administrators"/>
+    <add key="PasswordExpiryDays" value="300"/>
+     <add key="MedicareBillSharesDisplay" value="MCE"/>		
+		
+    <!--E: Adam 11-->
+    <!--S: Others -->
+    <add key="EnableClientSideLogging" value="45"/>
+	
+	
+	
+	C:\Program Files\ADAM\independent

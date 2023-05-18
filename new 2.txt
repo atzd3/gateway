@@ -1,0 +1,65 @@
+Application Setup Documentation - Cloud Operations - Knowledge Center (advantasure.com)
+
+PS c:\New-Cache CLVRcachedata
+
+PS c:\Grant-CacheAllowedClientAccount IIS_IUSRS
+
+Grant-CacheAllowedClientAccount -Account entcorecloud\CLVR_QA_APP
+
+https://jiradc.prod.advantasure.com/browse/PHSS-30819
+https://jiradc.prod.advantasure.com/browse/PHSS-31093
+
+
+April14th!$   test bcks   *test
+
+entcorecloud\BCKS_TST_APP = geCF9ntJhRzB48C4
+
+Zhad6z2hpzEmhHAu password
+Zhad6z2hpzEmhHAu
+April17th!&
+
+
+sc create ClaimsSch_LTR_RPT_CORR_ForBCKS-TSTC binPath= "\\ztwbcksutl01c\CoreApps\BCKS\TESTC\Utilities\ClaimsSchedulerService\ikaSystems.ClaimsSystems.Services.ClaimsScheduler.exe"
+InstallUtil.exe -i "\\ztwbcksutl01c\CoreApps\BCKS\TESTC\Utilities\ClaimsSchedulerService\ikaSystems.ClaimsSystems.Services.ClaimsScheduler.exe"
+
+Zhad6z2hpzEmhHAu
+
+BCKSTESTCReportandLetterX64
+sc create BCKSTESTHReportandLetterX64 binPath= "\\ZTWBCKSUTL01C\CoreApps\BCKS\TESTH\Utilities\ReportschedulerX64\ikaSystems.ClaimsSystems.Services.ClaimsScheduler.exe"
+
+QM{LdAy>O#\QOx5?
+
+MTWWBCBSNE04.entcore.com
+MTWWBCBSNE04\LA_Cyber_1
+
+nebraska, hphc, hap and ucare exception to handle  11c
+
+:c*.H!z3\(if%0/S
+MTWWBCBSNE01.entcore.com
+MTWWBCBSNE01\LA_Cyber_2
+
+
+
+April18th2023!*
+entcore\adfs_nectst
+
+
+HcbMTA-WRb3)T54m
+MTWWBCBSNE03.entcore.com
+MTWWBCBSNE03\LA_Cyber_2
+
+
+
+_%Ld\fe7M'1u@,}#
+
+MTWBCNESQL01C
+
+
+
+setupuser
+Password$12345
+
+
+
+p723224@entcorecloud.comPhilliphuges@@2023
+

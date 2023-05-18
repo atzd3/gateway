@@ -1,0 +1,104 @@
+write_log_info 2 "WINRM validation started"
+$PSPolicy = Get-ExecutionPolicy
+$MaxMemoryPerShellMB = Get-ItemPropertyValue -ErrorAction Stop HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WSMAN\Client MaxMemoryPerShellMB
+$MaxEnvelopeSizeKB=Get-ItemPropertyValue -ErrorAction Stop HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WSMAN\Client maxEnvelopeSize
+
+if ($returncode -eq "0") {
+    if ($noop){
+        if (-not ($DBDeployMethod -eq "REDGATE")) {
+          write_log_info 2 "nonredgate"
+        if (($PSPolicy.ToString() -eq "RemoteSigned")  -and ($MaxMemoryPerShellMB -ge 2048)  -and ($MaxEnvelopeSizeKB -ge 2048)) {
+            write_log_info 2 "Powershellremoting WINRM Success PS policy, MaxMemorypershellMB and MaxEnvelopeSizeKB"
+            $returncode = $lastexitcode
+        } else {
+           write_log_info -1 "Powershell remoting WINRM validation FAILURE due to the reasons below"
+           if(-not ($PSPolicy.ToString() -eq "RemoteSigned")){
+                write_log_info -1 "Powershell WINRM policy is not RemoteSigned and currently it is set to $PSPolicy"
+
+            }
+            if(-not ($MaxMemoryPerShellMB -ge 2048)){
+                write_log_info -1 "Powershell WINRM policy does not meet the MaxMemoryPerShell configuration and currently it is set to $MaxMemoryPerShellMB"
+
+            }
+            if(-not ($MaxEnvelopeSizeKB -ge 2048)){
+                write_log_info -1 "Powershell WINRM policy does not meet the MaxEnvelopeSize configuration and currently it is set to $MaxEnvelopeSizeKB"
+
+            }
+          
+            write_log_info -1 "Powershell remote validation END"
+            throw "WINRM validation failed"
+            $returncode = "-1"
+        }}
+        else {
+        
+            $exitflag = $true
+
+        
+    }} else {
+        
+             $exitflag = $true
+        
+        
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		if (-not ($DBDeployMethod -eq "REDGATE")) {
+         write_log_info 2 "redgateway"
+		 
+		 
+		 redgateway
+		 
+		 
+		 C:\Windows\System32\drivers\etc
+		 
+		 
+		 http://jenkins02v:8080/job/Deploy_Azure/job/CLAIMS_BCND_PROD_DEPLOY/937/
+		 http://jenkins02v:8080/job/Deploy_Azure/job/CLAIMS_BCVT_PROD_DEPLOY/1107/console
+		 http://jenkins02v:8080/job/Deploy_Azure/job/GW_BCND_PROD_DEPLOY/60/
+		 http://jenkins02v:8080/job/Deploy_Azure/job/GW_BCVT_PROD_DEPLOY/60/
+		 
+		 
+		 
+		 
+		 
+		 
+		 
+		 
+		 
+		 
+		 
+		 
+		 <add name="ClaimsDB" connectionString="Data Source=ZPLSHRDORA07C.entcorecloud.com/SCANOP;User ID=SCANCLMI_OWNER;Password=d8mus31i;Min Pool Size=1;Max Pool Size=21;" />
+		 
+		 <add name="ClaimsDB" connectionString="Data Source=ZSLSHRDORA01C.entcorecloud.com/BCKSOS;User ID=claims;Password=claim123test;Min Pool 
+		 Size=1;Max Pool Size=21;" />
+		 
+		 
+		 Data Source=ZSLSHRDORA01C.entcorecloud.com/BCKSOS;User ID=claims;Password=claim123test
+		 
+		 DATA SOURCE=10.120.13.69:1521/BCKSOS;USER ID=CLAIM_ADMIN;Password=ToDay60719"
+		 
+		 claims@bcksos;Password=ToDay60719
+		 claims/ToDay60719
+		 
+		 [Friday 8:54 AM] Nelakudhiti, Sandeep
+
+
+
+
+ZUWUSHDJNK02C.entcorecloud.com
+
+
+ZUWUSHDJNK11C.entcorecloud.com
+
+
+RJd?bIq-6\uKWM#O
+IPRDWB349.IKAPROD60.COM
+IPRDWB349\LA_Cyber_1
+

@@ -1,0 +1,71 @@
+mkdir rm\member-services-core-api
+mkdir rm\member-services-core-api_config
+mkdir rm\mrr-rm-ui
+mkdir rm\mrrrmazurefunctions
+mkdir rm\nppes-api
+mkdir rm\nppes-api_config
+mkdir rm\provider-api
+mkdir rm\provider-api_config
+mkdir rm\tepopsapi
+mkdir rm\tepopsapi_config
+
+
+
+xcopy ".\mrrrmazurefunctions\mrr-rm-azure-functions\mrr-rm-azure-functions\bin\Release\netcoreapp3.1\*" rm\mrrrmazurefunctions
+xcopy ".\member-services-core-api\member-services-core\bin\Release\net5.0\*" rm\member-services-core-api
+xcopy ".\member-services-core-api\*" rm\member-services-core-api_config
+xcopy ".\aca-tepprovider-api\TepProviderApiCore\bin\Release\net5.0\*" acabp\aca-tepprovider-api
+xcopy ".\mrr-rm-ui\rmui.root\dist\*" rm\mrr-rm-ui
+xcopy ".\nppes-api*" rm\nppes-api
+xcopy ".\nppes-api\*" rm\nppes-api_config
+xcopy ".\provider-api\ProviderApiCore\bin\Release\net5.0\*" rm\provider-api
+xcopy ".\provider-api\*" rm\provider-api_config
+xcopy ".\tepopsapi\TepOpsApiCore\bin\Release\net5.0\*" rm\tepopsapi
+xcopy ".\tepopsapi" rm\tepopsapi_config
+
+"C:\Program Files\7-Zip\7z.exe" a artifacts\rm.zip ".\rm\*" -xr!*.pdb -xr!lib -xr!localDB.config
+
+xcopy ".\aca-bp-az-validate\Aca.Bp.Az.Validate\Aca.Bp.Az.Validate\bin\Release\netcoreapp3.1\*" acabp\aca-bp-az-validate
+xcopy ".\coreapi\CoreAPI\CoreAPI\bin\Release\netcoreapp3.1\*" acabp\coreapi
+xcopy ".\aca-tepcommods-api\*" acabp\aca-tepcommods-api_config
+xcopy ".\aca-tepcommods-api\aca.tepcommods.api\bin\Release\net5.0\*" acabp\aca-tepcommods-api
+xcopy ".\aca-tepprovider-api\*" acabp\aca-tepprovider-api_config
+xcopy ".\aca-tepprovider-api\TepProviderApiCore\bin\Release\net5.0\*" acabp\aca-tepprovider-api
+"C:\Program Files\7-Zip\7z.exe" a ".\artifacts\artifacts.zip" ".\mrr-rm-ui\rmui.root\dist\*" -xr!*.pdb -xr!lib
+
+"C:\Program Files\7-Zip\7z.exe" a artifacts\acabp.zip ".\acabp\*" -xr!*.pdb -xr!lib -xr!localDB.config
+
+
+
+"C:\Program Files\7-Zip\7z.exe" a artifacts\complete_src.zip ".\member-services-core-api\*" -xr!*.pdb -xr!localDB.config
+"C:\Program Files\7-Zip\7z.exe" a artifacts\memberservicesapi.zip ".\member-services-core-api\MemberServices\bin\Release\net5.0\*" -xr!*.pdb -xr!localDB.config
+"C:\Program Files\7-Zip\7z.exe" a artifacts\complete_src.zip ".\tepopsapi\*" -xr!*.pdb -xr!localDB.config
+"C:\Program Files\7-Zip\7z.exe" a artifacts\Tepopsapi.zip ".\tepopsapi\TepOpsApiCore\bin\Release\net5.0\*" -xr!*.pdb -xr!localDB.config
+
+
+"C:\Program Files\7-Zip\7z.exe" a rm.zip ".\member-services-core-api" ".\mrr-rm-ui" ".\mrrrmazurefunctions\mrr-rm-azure-functions\mrr-rm-azure-functions\bin\Release\netcoreapp3.1\*" ".\nppes-api" ".\provider-api" ".\tepopsapi"  ".\rm.filemanagement\rm.filemanagement\bin\Release\netcoreapp3.1" -xr@.\cm\veracodeexclude.txt
+
+
+
+java -jar T:\Veracode\VeracodeJavaAPI.jar -vid ${bamboo.vidpassword} -vkey ${bamboo.vkeypassword} -action uploadandscan -appname "Ad Hoc Scans" -filepath artifacts\acabp.zip -createprofile false -version ${bamboo.buildNumber} -sandboxname RAQ-ACABP-DEV-VeracodeScan -createsandbox false
+
+java -jar T:\Veracode\VeracodeJavaAPI.jar -vid ${bamboo.vidpassword} -vkey ${bamboo.vkeypassword} -action uploadandscan -appname "Ad Hoc Scans" -filepath artifacts\rm.zip -createprofile false -version ${bamboo.buildNumber} -sandboxname RAQ-RM-DEV-VeracodeScan -createsandbox true
+
+
+
+
+
+edps-msg-processor.service.exe
+edps.encrypt.dll
+edps.encrypt.dll
+
+
+java -jar T:\Veracode\VeracodeJavaAPI.jar -vid ${bamboo.vidpassword} -vkey ${bamboo.vkeypassword} -action uploadandscan -appname MRR -filepath mrr.zip -createprofile false -version ${bamboo.buildNumber} -sandboxname MRR-DEV-VeracodeScan -createsandbox false
+java -jar T:\Veracode\VeracodeJavaAPI.jar -vid ${bamboo.vidpassword} -vkey ${bamboo.vkeypassword} -action uploadandscan -appname "EDPS" -filepath edps.zip -createprofile false -version "EDPSRel - ${bamboo.buildNumber}"
+
+java -jar T:\Veracode\VeracodeJavaAPI.jar -vid ${bamboo.vidpassword} -vkey ${bamboo.vkeypassword} -action uploadandscan -appname "EMRI" -filepath artifacts\emri.zip -createprofile false -version "EMRIRel - ${bamboo.buildNumber}"
+
+#set b="RiskAdjustmentRel-${bamboo.buildNumber}"
+#set z=7
+#set /a y=b+z
+java -jar T:\Veracode\VeracodeJavaAPI.jar -vid ${bamboo.vidpassword} -vkey ${bamboo.vkeypassword} -action uploadandscan -appname "MA BI Risk Adjustment Platform" -filepath .\artifacts\Businessanalytics.zip -createprofile false -version "RiskAdjustmentRel - ${bamboo.buildNumber}"

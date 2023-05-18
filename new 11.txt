@@ -1,0 +1,84 @@
+@Library('CommonPipeline') _
+
+import com.Visiant.CommonPipeline.*
+
+def vars = [
+    "deployDefaultReplyTo": (env.DEFAULT_REPLYTO ?: 'CompOps'),
+	"sourceToolkitPath": (env.TOOLKIT_PATH ?: ""),
+    "deployNOOPFlag": (env.NOOP_FLAG ?: 'true'),
+    "deployClient": (env.CLIENT ?: ""),
+    "deployEnv": (env.ENVIRONMENT ?: "NA"),
+    "productName": (env.PRODUCT ?: "CLAIMSPLATFORM"),
+    "deployDestination": (env.DESTINATION ?: "\\\\Ziwjnksfls01c\\NightlyBuild\\TEMP"),
+    "verbose": (env.verbose && env.verbose ==~ /^(?i)true$/)
+]
+
+def p
+def deployList = []
+def stashString
+
+timestamps {
+    stage('Config') {
+        node("master") {
+    	    p = loadAzureWebConfigProperties(vars)
+    	    
+    	    def version_number_string = "${vars.productName}, ${vars.deployClient}, ${vars.deployEnv}"
+            def build_version = VersionNumber versionNumberString: version_number_string, worstResultForIncrement: 'ABORT'
+            currentBuild.displayName = build_version
+			
+			vars.put("RelAuto", "RelAuto.zip")
+			fileExists("${vars.RelAuto}") && powershell("Remove-Item -Path ${vars.RelAuto} -Force")
+			zip(dir: "${vars.sourceToolkitPath}", glob: '**', zipFile: "${vars.RelAuto}")
+			stash(includes: vars.RelAuto, name: 'RELAUTO')
+
+			vars.put("deployToolkitPathParent", "C:\\Temp\\RelAuto_${vars.productName}_${vars.deployClient}_${vars.deployEnv}")
+			vars.put("deployToolkitPath", "${vars.deployToolkitPathParent}\\Deployment")
+    	    vars.put("deployProgram", "webconfig_remote_wrap.ps1")
+    	    vars.put("deployUser", p."${vars.productName}_${vars.deployEnv}_DeployBuildUserID")
+
+            vars.verbose && vars.each { k, v -> echo "Variable ${k} is ${v}" }
+		}
+    }
+    
+	stage('GetWebConfig') {
+	    node('AzureDeploy') {
+	        try {
+				cleanWs()
+	            unstash('RELAUTO')
+			    unzip(dir: "${vars.deployToolkitPath}", zipFile: 'RelAuto.zip', quiet: true)
+			
+                vars.put("unstashNode", "${env.NODE_NAME}")
+                vars.deploySource = pwd()
+
+		        runWebConfigGetStage(p, vars)
+		        
+                vars.put("WebConfigs", "WebConfigs.zip")
+			    zip(dir: "${vars.deployToolkitPath}", glob: "${vars.productName}/**", zipFile: "${vars.WebConfigs}")
+			    stash(includes: "${vars.WebConfigs}", name: 'STASH_WEBCONFIGS')
+	        } catch(Exception ex) {
+                throw ex
+	        } finally {
+                vars.put("AzureLogs", "AzureLogs.zip")
+			    zip(dir: "${vars.deployToolkitPath}", glob: "${vars.deployEnv}-Logs/**", zipFile: "${vars.AzureLogs}")
+			    stash(includes: vars.AzureLogs, name: 'STASH_LOGS')
+			
+		        cleanWs()
+		        
+				fileExists("${vars.deployToolkitPathParent}") && powershell("Remove-Item -Path ${vars.deployToolkitPathParent} -Force -Recurse")
+				//fileExists("${vars.deployToolkitPathParent}/${vars.deployToolkitPath}/${vars.deployEnv}-Logs") && powershell("Remove-Item -Path ${vars.deployToolkitPathParent} -Force -Recurse")
+				//fileExists("${vars.deployToolkitPathParent}/${vars.deployToolkitPath}/${vars.productName}") && powershell("Remove-Item -Path ${vars.deployToolkitPathParent} -Force -Recurse")
+				
+				stage('SaveArtifacts') {
+					node("master") {
+						unstash('STASH_WEBCONFIGS')
+						unzip(dir: "${env.destination}", zipFile: 'WebConfigs.zip')
+					}
+					node("master") {
+						unstash('STASH_LOGS')
+						unzip(dir: "${env.destination}", zipFile: 'AzureLogs.zip')
+					}
+				}
+	        }
+	    }
+	}
+}

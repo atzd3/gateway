@@ -1,0 +1,29 @@
+Integration.BIZ.NonEDI.NACHA
+
+Integration.BIZ.RemittanceAdvice   https://dev.azure.com/Ikasystems-Pilot/BizTalk/_artifacts/feed/EDIBizTalk-2020_Release_Full/UPack/integration_biz_remittanceadvice_1_0_0_20221214/overview/1.0.0
+Integration.BIZ.NonEDI.PROVXML
+https://dev.azure.com/Ikasystems-Pilot/BizTalk/_artifacts/feed/EDIBizTalk-2020_Release_Full/UPack/integration_biz_nonedi_provxml_1_0_0_20221214/overview/1.0.0
+
+
+
+Integration.BIZ.NonEDI.NACHA - Undeploy
+Integration.BIZ.NACHAEncryption - Deploy   integration_biz_nachaencryption_1_0_0_20230216   done
+Integration.BIZ.NonEDI.NACHA - Deploy   -- done
+Integration.BIZ.NonEDI.PROVXML - Undeploy --done 
+Integration.BIZ.NonEDI.PROVXML - Deploy  -done
+Integration.BIZ.RemittanceAdvice - Undeploy -- done
+Integration.BIZ.RemittanceAdvice - Deploy  --done
+
+ 
+
+Integration.BIZ.NonEDI.CheckInfo - Deploy --done
+Integration.BIZ.NonEDI.NACHAEnrollment.Efile - Deploy --done
+Integration.BIZ.NonEDI.NACHAEnrollment.MemberBankDetails - Deploy --done
+Integration.BIZ.NonEDI.NACHAEnrollment.APPIN - Deploy -- done
+Integration.BIZ.NonEDI.NACHAEnrollment.DRx - Deploy-- done
+
+
+integration_biz_nonedi_nacha_1_0_0_20230418
+
+April20th!
+

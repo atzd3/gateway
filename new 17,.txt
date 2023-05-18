@@ -1,0 +1,73 @@
+<add key="IssuerName" value="BCKSPassiveSTS" />
+    <add key="SigningCertificateName" value="CN=sso.test.advantasure.com, O=Advantasure, L=Detroit, S=Michigan, C=US"/>
+    <add key="EncryptingCertificateName" value="" />
+    <add key="AdminCoreConnectionReference" value="AdminDBConnection" />
+    <add key="TrustedADFS" value="https://bcbsksc-adfs.test.advantasure.com/adfs/ls/" />
+	"https://bcbsksc-adfs.test.advantasure.com/adfs/ls/"
+	http://bcbsksg-adfs.test.advantasure.com
+	http://bcbsksh-adfs.test.advantasure.com
+	
+    <!-- URL for different sites start-->
+	
+	http://bcbsks-c.test.advantasure.com/Accounts/Login
+	
+	<add key="UserMgmtURL" value="https://bcbsks-c.test.advantasure.com/Administration" />
+    <add key="AuthURL" value="https://bcbsks-c.test.advantasure.com/Accounts/" 
+	\\ZTWBCKSUTL01C\CoreApps\BCKS\TESTG-Authlite\AuthliteServices
+	
+	<?xml version="1.0" encoding="utf-8"?>
+<ADFS>
+         <appSettings>
+		<add Key="Environment" value="Test" /> <!-- Test or Staging or Prod -->		
+         </appSettings>
+        <IkaTokenProviders>
+		<IkaTokenProvider IsRequired="true" URL="https://bcbsks-c.test.advantasure.com/Accounts/" Name="BCKSAccounts" TrustID="BCKSPassiveSTS" />
+	</IkaTokenProviders>
+        <IkaSSOProducts>
+           <IkaSSOProduct IsRequired="true" URL="https://bcbsks-c.test.advantasure.com/Administration/" Name="BCKSAdministration" />
+	   <IkaSSOProduct IsRequired="true" URL="https://bcbsks-c.test.advantasure.com/Claims/" Name="BCKSClaims" />
+	   <IkaSSOProduct IsRequired="true" URL="https://bcbsks-c.test.advantasure.com/Enrollment/" Name="BCKSMedicare" />
+        </IkaSSOProducts>
+
+</ADFS>
+
+<ADFS>
+         <appSettings>
+		<add Key="Environment" value="Test" /> <!-- Test or Staging or Prod -->		
+         </appSettings>
+        <IkaTokenProviders>
+		<IkaTokenProvider IsRequired="true" URL="https://bcbsks-g.test.advantasure.com/Accounts/" Name="BCKSAccounts" TrustID="BCKSPassiveSTS" />
+	</IkaTokenProviders>
+        <IkaSSOProducts>
+           <IkaSSOProduct IsRequired="true" URL="https://bcbsks-g.test.advantasure.com/Administration/" Name="BCKSAdministration" />
+	   <IkaSSOProduct IsRequired="true" URL="https://bcbsks-g.test.advantasure.com/Claims/" Name="BCKSClaims" />
+	   <IkaSSOProduct IsRequired="true" URL="https://bcbsks-g.test.advantasure.com/Enrollment/" Name="BCKSMedicare" />
+        </IkaSSOProducts>
+
+</ADFS>
+
+
+
+bcbsks-g.test.advantasure.com
+https://bcbsksg-adfs.test.advantasure.com/FederationMetadata/2007-06/FederationMetadata.xml
+BCKSPassiveSTS
+
+
+
+ZTWBCKSWEB01C,ZTWBCKSWEB02C
+
+
+ 
+
+ 	Primary	Secondary
+Monday	No Code review
+Tuesday	Jagadish	Jeremy
+Wednesday	Alekhya	Sandeep
+Thursday	Jeremy	Shivani
+Friday	No Code review
+
+
+BCKS	ZTWBCKSWEB01C	10.120.186.71
+BCKS	ZTWBCKSWEB02C	10.120.186.72
+
+ 

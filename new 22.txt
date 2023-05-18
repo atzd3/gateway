@@ -1,0 +1,63 @@
+ <Client Name="INDEPENDENT-PDP" Environment="PROD">
+	<DataCenter>Azure LS</DataCenter>
+	<LifeCycle>Live</LifeCycle>
+        <Gateway Server="IPRDWB44" URL="https://independent-pdp-medicare.ikaenterprise.com">
+            <DomainName>ikaProd60</DomainName>
+            <UserName>srv-scmadmin</UserName>
+            <DBServer>MPWDIHA01</DBServer>
+            <DBName>Medicare01_Independent_PDP</DBName>
+            <SiteName>Independent_Health_PDP</SiteName>
+            <AppPoolName>independent-pdp</AppPoolName>
+            <IISVersion>iis10</IISVersion>
+            <CarrierPath>D:\Carrier\Independent_health_pdp</CarrierPath>
+            <IntegratedFlag>N</IntegratedFlag>
+            <AccountsFolder></AccountsFolder>
+            <CarrierBackupPath Retain="7">D:\CarrierBackUps\Independent_health_pdp</CarrierBackupPath>
+        </Gateway>
+		
+		
+		
+		<ClaimsPlatform URL="https://independent-pdp-claims-webservice.ikaenterprise.com/IKAService.asmx">
+			<ModuleFlags>
+				<AdminPortal></AdminPortal>
+				<Claims>Y</Claims>
+				<Billings></Billings>
+				<Correspondence></Correspondence>
+				<WebServices>Y</WebServices>
+				<Scheduler></Scheduler>
+				<PEMPortals></PEMPortals>
+			</ModuleFlags>
+			<Web Server="MPWWIHA03V">
+				<DomainName>ikaprod60</DomainName>
+				<UserName>srv-scmadmin</UserName>
+				<IISVersion>IIS8</IISVersion>
+				<PlatformSites>
+					<SiteName>Independent-PDP</SiteName>
+					<AppPoolName>Independent-PDP</AppPoolName>
+					<CarrierPath>D:\Carrier\Independent_health_pdp</CarrierPath>
+					<CarrierBackupPath Retain="7">D:\carrier_backup\Independent-PDP</CarrierBackupPath>
+					<Excludefolders>UserDocuments,UserDocuments2</Excludefolders>
+					<AccountsPath>N/A</AccountsPath>
+					<WebServicesPath>D:\Carrier\Independent-PDP\IKAServices</WebServicesPath>
+					<SchedulerPath></SchedulerPath>
+				</PlatformSites>
+			</Web>
+			<Database>
+				<CoreSchema>IHBNC_OWNER</CoreSchema>
+				<DBName>ibncihp2</DBName>
+			</Database>
+		</ClaimsPlatform>
+		
+		
+		
+		
+		
+		
+		
+		m6fzpI[q4KP|7ocR
+		
+		
+		qh$,LFy?M?J6iEBM   (5|i#b?KA06rkV>)          dFztY=f@%L4'?Nb?
+		MPWWIHA03V.IKAPROD60.COM
+        MPWWIHA03V\LA_Cyber_!
+		

@@ -1,0 +1,6 @@
+$CahceName= "IBCXCache";
+$CacheAccount="entcorecloud\IBCX_STG_APP";
+Import-Module DistributedCacheAdministration;
+Use-CacheCluster
+New-Cache $CahceName
+Grant-CacheAllowedClientAccount -Account $CacheAccount

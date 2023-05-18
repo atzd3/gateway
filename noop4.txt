@@ -1,0 +1,46 @@
+‎e6 1f a8 5e fe af 7b ec ae c2 e1 fe 2a e6 0c 9d e1 7f de 2e
+‎e6 1f a8 5e fe af 7b ec ae c2 e1 fe 2a e6 0c 9d e1 7f de 2e
+e61fa85efeaf7becaec2e1fe2ae60c9de17fde2e
+
+April3rd#
+
+Service Account id :  svc_terraform_DA
+
+Kindly find below the new password for the service account created.
+
+T8guYX]b26M_fj&R
+
+HfAwr#6&M8N$4GFffQqw
+
+AxA1ddPAzE687JTJ27jy
+
+
+e138kTsCJM4P4oKQIVgl
+https://bcbsnd-adfs.prod.advantasure.com/FederationMetadata/2007-06/FederationMetadata.xml
+
+
+$PSPolicy = Get-ExecutionPolicy
+$MaxMemoryPerShellMB = Get-ItemPropertyValue -ErrorAction Stop HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WSMAN\Client MaxMemoryPerShellMB
+$MaxEnvelopeSizeKB=Get-ItemPropertyValue -ErrorAction Stop HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WSMAN\Client maxEnvelopeSize
+
+if ($returncode -eq "0") {
+    if (($noop) -and ($module -eq 'CLAIMS')){
+        if (($PSPolicy.ToString() -eq "RemoteSigned")  -and ($MaxMemoryPerShellMB -eq 2048)  -and ($MaxEnvelopeSizeKB -gt 2045)) {
+            write_log_info 2 "Success winrm commands"
+            $returncode = $lastexitcode
+        } else {
+            throw "Failed to get session for $servername in domain $domainname"
+            write_log_info 2 "Policy :$PSPolicy expecting value should be RemoteSigned"
+            $returncode = "-1"
+        }
+        
+    } else {
+        
+             $exitflag = $true
+        
+        
+    }
+} else {
+    $exitflag = $true
+}
+write_log_info 2 "After Success winrm commands, returncode=$returncode, lastexitcode=$lastexitcode, exitflag=$exitflag."
