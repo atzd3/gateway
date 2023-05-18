@@ -1,0 +1,6 @@
+New-ItemProperty : Cannot bind argument to parameter 'Name' because it is null.
+At line:22 char:55
++ ...          New-ItemProperty -Path $FontRegPath -Name $Font.Name -Value  ...
++                                                        ~~~~~~~~~~
+    + CategoryInfo          : InvalidData: (:) [New-ItemProperty], ParameterBindingValidationException
+    + FullyQualifiedErrorId : ParameterArgumentValidationErrorNullNotAllowed,Microsoft.PowerShell.Commands.NewItemPropertyCommand
