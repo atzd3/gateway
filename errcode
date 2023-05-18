@@ -1,0 +1,29 @@
+
+    $installdir= "C:\Temp\IIS2\IIS"
+
+    $objShell = New-Object -ComObject Shell.Application
+    $objFolder = $objShell.Namespace(0x14)
+    #Set Font Reg Key Path
+    $FontRegPath = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts"
+
+    $Fonts = Get-ChildItem -Path $installdir  -Recurse -Include *.ttf,*.otf
+
+
+    foreach($File in $Fonts) 
+    {
+    #   Write-Host $File.Name
+        $fontPath="c:\windows\fonts\$($File.Name)"
+    #    Write-Host $fontPath
+        If (!(Test-Path ($fontPath)))
+        {
+            write-host  "Installing OCR font.."
+            $objFolder.CopyHere($File.fullname)
+            #Set the Registry Key to indicate the Font has been installed
+            New-ItemProperty -Path $FontRegPath -Name $Font.Name -Value $Font.Name -PropertyType String | Out-Null
+        }
+        else
+        {
+            write-host "OCR font already exists.."
+        }
+    }
+    
