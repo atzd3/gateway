@@ -1,0 +1,1 @@
+if (!(Test-Path $fontPath) -or !(Get-ItemProperty -Path $fontRegPath -Name $font.Name -EA SilentlyContinue))
