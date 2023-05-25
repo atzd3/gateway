@@ -1,0 +1,24 @@
+$installDir = "C:\Temp\OCRFONT"
+$objShell = New-object -Comobject Shell.Application
+$objFolder = $objShell.Namespace(0x14)
+# Set Font Reg Key Path
+$fontRegPath = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts"
+
+$fonts = Get-ChildItem -Path $installDir -Recurse -Include *.ttf,*.otf
+foreach ($font in $fonts) {
+    Write-Host $font.Name
+    $fontPath = "C:\windows\fonts\$($font.Name)"
+    Write-Host $fontPath
+    $fontRegPath2 = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts\$($font.Name)"
+    if (!(Test-Path $fontPath) -or !(Test-Path $fontRegPath2)) {
+        Write-Host $fontPath
+        $objFolder.CopyHere($font.fullname)
+        Write-Host "Installing OCR font."
+        Copy-Item $font.Fullname "C:\windows\Fonts" -Force
+        # Set the Registry Key to indicate the Font has been installed
+        New-ItemProperty -Path $fontRegPath -Name $font.Name -Value $font.Name -PropertyType String | Out-Null
+        Write-Host "Finished"
+    } else {
+        Write-Host "OCR font already exists."
+    }
+}
