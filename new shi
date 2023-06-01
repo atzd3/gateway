@@ -1,0 +1,115 @@
+Checking out git git@github.com:Advantasure/Devops-automation.git into C:\Users\SVC_JENKINS_ADM\AppData\Local\Jenkins\.jenkins\workspace\Deploy_Azure\CLAIMS_AZURE_PLATFORM_DEPLOY@script\0ce644e337ace9d7767279a646a120ce2bb074b59c3d984883c7da672a03f8fa to read JenkinsPipeline/Pipelines/AzureDeploy/Jenkinsfile_Claims.groovy
+The recommended git tool is: C:\Program Files\Git\bin\git.exe
+using credential jenkins-private-key
+Cloning the remote Git repository
+Cloning repository git@github.com:Advantasure/Devops-automation.git
+ > C:\Program Files\Git\bin\git.exe init C:\Users\SVC_JENKINS_ADM\AppData\Local\Jenkins\.jenkins\workspace\Deploy_Azure\CLAIMS_AZURE_PLATFORM_DEPLOY@script\0ce644e337ace9d7767279a646a120ce2bb074b59c3d984883c7da672a03f8fa # timeout=10
+Fetching upstream changes from git@github.com:Advantasure/Devops-automation.git
+ > C:\Program Files\Git\bin\git.exe --version # timeout=10
+ > git --version # 'git version 2.40.0.windows.1'
+using GIT_SSH to set credentials jenkins-private-key
+Verifying host key using known hosts file
+ > C:\Program Files\Git\bin\git.exe fetch --tags --force --progress -- git@github.com:Advantasure/Devops-automation.git +refs/heads/*:refs/remotes/origin/* # timeout=10
+ > C:\Program Files\Git\bin\git.exe config remote.origin.url git@github.com:Advantasure/Devops-automation.git # timeout=10
+ > C:\Program Files\Git\bin\git.exe config --add remote.origin.fetch +refs/heads/*:refs/remotes/origin/* # timeout=10
+Avoid second fetch
+ > C:\Program Files\Git\bin\git.exe rev-parse "refs/remotes/origin/main^{commit}" # timeout=10
+Checking out Revision a764ebc992471d3d338efe72ccea76426abe11b9 (refs/remotes/origin/main)
+ > C:\Program Files\Git\bin\git.exe config core.sparsecheckout # timeout=10
+ > C:\Program Files\Git\bin\git.exe checkout -f a764ebc992471d3d338efe72ccea76426abe11b9 # timeout=10
+Commit message: "add scripts from REL branch"
+First time build. Skipping changelog.
+Resume disabled by user, switching to high-performance, low-durability mode.
+Loading library CommonPipeline@main
+Attempting to resolve main from remote references...
+ > C:\Program Files\Git\bin\git.exe --version # timeout=10
+ > git --version # 'git version 2.40.0.windows.1'
+using GIT_SSH to set credentials jenkins-private-key
+Verifying host key using known hosts file
+ > C:\Program Files\Git\bin\git.exe ls-remote -h -- git@github.com:Advantasure/Devops-automation.git # timeout=10
+Found match: refs/heads/main revision a764ebc992471d3d338efe72ccea76426abe11b9
+The recommended git tool is: C:\Program Files\Git\bin\git.exe
+using credential jenkins-private-key
+Cloning the remote Git repository
+Cloning with configured refspecs honoured and without tags
+Cloning repository git@github.com:Advantasure/Devops-automation.git
+ > C:\Program Files\Git\bin\git.exe init C:\Users\SVC_JENKINS_ADM\AppData\Local\Jenkins\.jenkins\workspace\Deploy_Azure\CLAIMS_AZURE_PLATFORM_DEPLOY@libs\bc305d58530931d8425a482a1e5a5fd3066287f71355168a96da8edb50f8560a # timeout=10
+Fetching upstream changes from git@github.com:Advantasure/Devops-automation.git
+ > C:\Program Files\Git\bin\git.exe --version # timeout=10
+ > git --version # 'git version 2.40.0.windows.1'
+using GIT_SSH to set credentials jenkins-private-key
+Verifying host key using known hosts file
+ > C:\Program Files\Git\bin\git.exe fetch --no-tags --force --progress -- git@github.com:Advantasure/Devops-automation.git +refs/heads/*:refs/remotes/origin/* # timeout=10
+ > C:\Program Files\Git\bin\git.exe config remote.origin.url git@github.com:Advantasure/Devops-automation.git # timeout=10
+ > C:\Program Files\Git\bin\git.exe config --add remote.origin.fetch +refs/heads/*:refs/remotes/origin/* # timeout=10
+Avoid second fetch
+Checking out Revision a764ebc992471d3d338efe72ccea76426abe11b9 (main)
+ > C:\Program Files\Git\bin\git.exe config core.sparsecheckout # timeout=10
+ > C:\Program Files\Git\bin\git.exe checkout -f a764ebc992471d3d338efe72ccea76426abe11b9 # timeout=10
+Commit message: "add scripts from REL branch"
+Loading library PipelineUtils@main
+Attempting to resolve main from remote references...
+ > C:\Program Files\Git\bin\git.exe --version # timeout=10
+ > git --version # 'git version 2.40.0.windows.1'
+using GIT_SSH to set credentials jenkins-private-key
+Verifying host key using known hosts file
+ > C:\Program Files\Git\bin\git.exe ls-remote -h -- git@github.com:Advantasure/Devops-automation.git # timeout=10
+Found match: refs/heads/main revision a764ebc992471d3d338efe72ccea76426abe11b9
+The recommended git tool is: C:\Program Files\Git\bin\git.exe
+using credential jenkins-private-key
+ > C:\Program Files\Git\bin\git.exe rev-parse --resolve-git-dir C:\Users\SVC_JENKINS_ADM\AppData\Local\Jenkins\.jenkins\workspace\Deploy_Azure\CLAIMS_AZURE_PLATFORM_DEPLOY@libs\bc305d58530931d8425a482a1e5a5fd3066287f71355168a96da8edb50f8560a\.git # timeout=10
+Fetching changes from the remote Git repository
+ > C:\Program Files\Git\bin\git.exe config remote.origin.url git@github.com:Advantasure/Devops-automation.git # timeout=10
+Fetching without tags
+Fetching upstream changes from git@github.com:Advantasure/Devops-automation.git
+ > C:\Program Files\Git\bin\git.exe --version # timeout=10
+ > git --version # 'git version 2.40.0.windows.1'
+using GIT_SSH to set credentials jenkins-private-key
+Verifying host key using known hosts file
+ > C:\Program Files\Git\bin\git.exe fetch --no-tags --force --progress -- git@github.com:Advantasure/Devops-automation.git +refs/heads/*:refs/remotes/origin/* # timeout=10
+Checking out Revision a764ebc992471d3d338efe72ccea76426abe11b9 (main)
+ > C:\Program Files\Git\bin\git.exe config core.sparsecheckout # timeout=10
+ > C:\Program Files\Git\bin\git.exe checkout -f a764ebc992471d3d338efe72ccea76426abe11b9 # timeout=10
+Commit message: "add scripts from REL branch"
+[Pipeline] Start of Pipeline
+[Pipeline] node
+Running on Jenkins in C:\Users\SVC_JENKINS_ADM\AppData\Local\Jenkins\.jenkins\workspace\Deploy_Azure\CLAIMS_AZURE_PLATFORM_DEPLOY
+[Pipeline] {
+[Pipeline] wrap
+[Pipeline] {
+[Pipeline] }
+[Pipeline] // wrap
+[Pipeline] }
+[Pipeline] // node
+[Pipeline] timestamps
+[Pipeline] {
+[Pipeline] stage
+[Pipeline] { (Get appsettings from TFS)
+[Pipeline] node
+23:37:36  Running on Jenkins in C:\Users\SVC_JENKINS_ADM\AppData\Local\Jenkins\.jenkins\workspace\Deploy_Azure\CLAIMS_AZURE_PLATFORM_DEPLOY
+[Pipeline] {
+[Pipeline] echo
+23:37:36  Skip downloading appsettings.json file
+[Pipeline] }
+[Pipeline] // node
+[Pipeline] }
+[Pipeline] // stage
+[Pipeline] stage
+[Pipeline] { (Config)
+[Pipeline] node
+23:37:36  Running on Jenkins in C:\Users\SVC_JENKINS_ADM\AppData\Local\Jenkins\.jenkins\workspace\Deploy_Azure\CLAIMS_AZURE_PLATFORM_DEPLOY
+[Pipeline] {
+[Pipeline] echo
+23:37:36  verbose is false
+[Pipeline] libraryResource
+[Pipeline] fileExists
+[Pipeline] stash
+[Pipeline] }
+[Pipeline] // node
+[Pipeline] }
+[Pipeline] // stage
+[Pipeline] }
+[Pipeline] // timestamps
+[Pipeline] End of Pipeline
+ERROR: No files included in stash ‘RELAUTO’
+Finished: FAILURE
