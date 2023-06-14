@@ -1,0 +1,57 @@
+# Define registry path and properties
+$registryPath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WSMAN\Client"
+$propertyName = "MaxMemoryPerShellMB"
+$propertyEnvelope = "MaxEnvelopeSizeKB"
+
+# Function to log information
+function Write-LogInfo {
+    param (
+        [int]$exitCode,
+        [string]$message
+    )
+    # Assuming write_log_info is a custom function to log the information.
+    # This is a placeholder, replace it with your actual logging function.
+    Write-Output "$exitCode: $message"
+}
+
+# Check if registry path exists
+if (Test-Path -Path $registryPath) {
+
+    Write-LogInfo 2 "WINRM validation started"
+
+    # Check if MaxMemoryPerShellMB exists
+    if (Get-ItemProperty -Path $registryPath -Name $propertyName -ErrorAction SilentlyContinue) {
+        
+        $MaxMemoryPerShellMB = (Get-ItemPropertyValue -Path $registryPath -Name $propertyName)
+        $MaxEnvelopeSizeKB = (Get-ItemPropertyValue -Path $registryPath -Name $propertyEnvelope)
+        
+        $SPSPolicy = Get-ExecutionPolicy
+
+        if ($SPSPolicy -eq "RemoteSigned" -and $MaxMemoryPerShellMB -ge 2048 -and $MaxEnvelopeSizeKB -ge 2048) {
+            Write-LogInfo 2 "Powershell remoting WINRM Success: PS policy, MaxMemoryPerShellMB, and MaxEnvelopeSizeKB"
+        } else {
+            Write-LogInfo -1 "Powershell remoting WINRM validation FAILURE due to the reasons below"
+            
+            if ($SPSPolicy -ne "RemoteSigned") {
+                Write-LogInfo -1 "Powershell WINRM policy is not RemoteSigned and currently it is set to $SPSPolicy"
+            }
+
+            if ($MaxMemoryPerShellMB -lt 2048) {
+                Write-LogInfo -1 "Powershell WINRM policy does not meet the MaxMemoryPerShellMB configuration and currently it is set to $MaxMemoryPerShellMB"
+            }
+
+            if ($MaxEnvelopeSizeKB -lt 2048) {
+                Write-LogInfo -1 "Powershell WINRM policy does not meet the MaxEnvelopeSizeKB configuration and currently it is set to $MaxEnvelopeSizeKB"
+            }
+            
+            Write-LogInfo -1 "Powershell remote validation END"
+            throw "WINRM validation failed"
+        }
+        
+    } else {
+        Write-LogInfo -1 "The property MaxMemoryPerShellMB does not exist at path $registryPath"
+    }
+
+} else {
+    Write-LogInfo -1 "The registry path $registryPath does not exist"
+}
