@@ -1,0 +1,19 @@
+$registryPath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WSMAN\Client"
+$propertyName = "MaxMemoryPerShellMB"
+
+if(Test-Path -Path $registryPath)
+{
+    if(Get-ItemProperty -Path $registryPath -Name $propertyName -ErrorAction SilentlyContinue)
+    {
+        $propertyValue = (Get-ItemProperty -Path $registryPath).$propertyName
+        Write-Output "MaxMemoryPerShellMB is set to $propertyValue"
+    }
+    else
+    {
+        Write-Output "The property MaxMemoryPerShellMB does not exist at path $registryPath"
+    }
+}
+else
+{
+    Write-Output "The registry path $registryPath does not exist"
+}
