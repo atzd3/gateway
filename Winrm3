@@ -1,0 +1,7 @@
+$property = (Get-Item -Path $registryPath).Property
+
+if ($property -contains $propertyName) {
+    # Code to execute if $propertyName DOES exist
+} else {
+    # Code to execute if $propertyName does NOT exist
+}
