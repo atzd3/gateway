@@ -1,0 +1,32 @@
+write-log -info -message "WINRM validation started"
+
+$PSPolicy = Get-ExecutionPolicy
+$MaxMemoryPerShellMB = Get-ItemPropertyValue -ErrorAction Stop -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WSMAN\Client' -Name 'MaxMemoryPerShellMB'
+$MaxEnvelopeSizeKB = Get-ItemPropertyValue -ErrorAction Stop -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WSMAN\Client' -Name 'MaxEnvelopeSizeKB'
+
+if (!$noop) {
+    write-log -info -message "Skipping WINRM validation because noop is false"
+    $exitflag = $true
+    return
+}
+
+if (($PSPolicy.ToString() -eq "RemoteSigned") -and ($MaxMemoryPerShellMB -ge 2048) -and ($MaxEnvelopeSizeKB -ge 2048)) {
+    write-log -info -message "Powershell remoting WINRM Success. PS Policy, MaxMemoryPerShellMB, and MaxEnvelopeSizeKB all valid."
+} else {
+    write-log -info -message "Powershell remoting WINRM validation FAILURE due to the reasons below."
+
+    if (-not ($PSPolicy.ToString() -eq "RemoteSigned")) {
+        write-log -info -message "Powershell WINRM policy is not RemoteSigned. Current setting: $PSPolicy."
+    }
+
+    if (-not ($MaxMemoryPerShellMB -ge 2048)) {
+        write-log -info -message "Powershell WINRM policy does not meet the MaxMemoryPerShell configuration. Current setting: $MaxMemoryPerShellMB."
+    }
+
+    if (-not ($MaxEnvelopeSizeKB -ge 2048)) {
+        write-log -info -message "Powershell WINRM policy does not meet the MaxEnvelopeSize configuration. Current setting: $MaxEnvelopeSizeKB."
+    }
+
+    write-log -info -message "Powershell remoting validation END"
+    throw "WINRM validation failed"
+}
